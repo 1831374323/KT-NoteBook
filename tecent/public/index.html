@@ -514,7 +514,8 @@
     }
   </style>
   <!-- 腾讯云开发 Web SDK -->
-  <script src="https://static.cloudbase.net/cloudbase-js-sdk/2.17.3/cloudbase.full.js"></script>
+  <!-- 需 2.24+ 才支持 signInWithPassword / signInAnonymously 等新认证 API -->
+  <script src="https://static.cloudbase.net/cloudbase-js-sdk/latest/cloudbase.full.js"></script>
 </head>
 <body>
 <div class="app">
@@ -617,9 +618,13 @@
 </div>
 
 <script>
-  // --- 腾讯云开发 TCB SDK ---
-  const tcbApp        = cloudbase.init({ env: "kt-notebook-5gzea6as40f0fb41" });
-  const tcbAuth       = tcbApp.auth({ persistence: "local" });
+  // --- 腾讯云开发 TCB SDK (2.24+ 认证 API) ---
+  const tcbApp = cloudbase.init({
+    env: "kt-notebook-5gzea6as40f0fb41",
+    region: "ap-shanghai",
+    auth: { detectSessionInUrl: true }
+  });
+  const tcbAuth = tcbApp.auth();
   const CLOUD_PATH    = "notes/notebook.json";
   const CLOUD_FILE_ID = "cloud://kt-notebook-5gzea6as40f0fb41/" + CLOUD_PATH;
 
@@ -1113,15 +1118,18 @@
     window.addEventListener("online",  () => setSyncBadge("online"));
     window.addEventListener("offline", () => setSyncBadge("offline"));
 
-    // 登录：优先用户名密码，失败则降级匿名登录
+    // 登录：优先用户名密码，失败则降级匿名登录（使用 2.24+ signInWithPassword / signInAnonymously）
     try {
-      let state = await tcbAuth.getLoginState();
-      if (!state) {
-        try {
-          await tcbAuth.signInWithUsernameAndPassword("default", "Default1234");
-        } catch (e) {
-          console.warn("用户名密码登录失败，尝试匿名登录：", e);
-          await tcbAuth.signInAnonymously();
+      const { data: sessionData } = await tcbAuth.getSession();
+      if (!sessionData?.session) {
+        const { error: pwdErr } = await tcbAuth.signInWithPassword({
+          username: "default",
+          password: "Default1234"
+        });
+        if (pwdErr) {
+          console.warn("用户名密码登录失败，尝试匿名登录：", pwdErr);
+          const { error: anonErr } = await tcbAuth.signInAnonymously();
+          if (anonErr) throw anonErr;
         }
       }
     } catch (e) {
