@@ -1,0 +1,15 @@
+{
+  "envId": "kt-notebook-5gzea6as40f0fb41",
+  "framework": {
+    "name": "kt-notebook",
+    "plugins": {
+      "client": {
+        "use": "@cloudbase/framework-plugin-website",
+        "inputs": {
+          "buildCommand": "",
+          "outputPath": "tecent/public"
+        }
+      }
+    }
+  }
+}
