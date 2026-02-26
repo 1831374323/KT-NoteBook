@@ -689,6 +689,30 @@
     } catch (e) { notes = []; }
   }
 
+  /**
+   * 合并云端与本地笔记（按 id 去重，同 id 取 createdAt 更新的），避免直接覆盖导致丢数据
+   * @param {Note[]} cloudNotes 云端数据
+   * @param {Note[]} localNotes 本地数据
+   * @returns {Note[]} 合并后的列表，按 createdAt 排序
+   */
+  function mergeNotes(cloudNotes, localNotes) {
+    const byId = new Map();
+    const add = (list) => {
+      if (!Array.isArray(list)) return;
+      for (const n of list) {
+        if (!n || n.id == null) continue;
+        const existing = byId.get(n.id);
+        const created = n.createdAt != null ? n.createdAt : 0;
+        if (!existing || (existing.createdAt != null && created > existing.createdAt)) {
+          byId.set(n.id, n);
+        }
+      }
+    };
+    add(cloudNotes);
+    add(localNotes);
+    return Array.from(byId.values()).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  }
+
   // 获取当前所有已有标签
   function getAllExistingTags() {
     const set = new Set();
@@ -1139,7 +1163,9 @@
       return;
     }
 
-    // 从云存储读取笔记
+    // 从云存储读取笔记，与本地合并后再写回（避免直接覆盖导致多端丢数据）
+    loadNotesFromLocal();
+    const localBeforeMerge = notes.length ? notes.slice() : [];
     try {
       const res = await tcbApp.getTempFileURL({
         fileList: [{ fileID: CLOUD_FILE_ID, maxAge: 3600 }]
@@ -1149,18 +1175,22 @@
         const resp = await fetch(item.tempFileURL);
         if (resp.ok) {
           const data = await resp.json();
-          notes = Array.isArray(data) ? data : [];
+          const cloudNotes = Array.isArray(data) ? data : [];
+          notes = mergeNotes(cloudNotes, localBeforeMerge);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
           setSyncBadge("online");
-        } else {
-          loadNotesFromLocal();
+          // 若合并结果与云端不一致，上传合并后的完整数据，保证云上也是最新合并版
+          if (JSON.stringify(cloudNotes) !== JSON.stringify(notes)) {
+            try {
+              const blob = new Blob([JSON.stringify(notes)], { type: "application/json" });
+              const file = new File([blob], "notebook.json", { type: "application/json" });
+              await tcbApp.uploadFile({ cloudPath: CLOUD_PATH, filePath: file });
+            } catch (e) { console.warn("合并后回写云存储失败：", e); }
+          }
         }
-      } else {
-        loadNotesFromLocal();
       }
     } catch (err) {
       console.warn("云存储读取失败，使用本地数据：", err);
-      loadNotesFromLocal();
       setSyncBadge("offline");
     }
     render();
