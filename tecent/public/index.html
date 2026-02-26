@@ -1167,13 +1167,20 @@
           password: "Default1234"
         });
         if (pwdErr) {
-          console.warn("用户名密码登录失败，尝试匿名登录：", pwdErr);
+          console.warn("[Auth] 用户名密码登录失败，尝试匿名登录：", pwdErr);
           const { error: anonErr } = await tcbAuth.signInAnonymously();
           if (anonErr) throw anonErr;
+          console.log("[Auth] 匿名登录成功");
+        } else {
+          console.log("[Auth] 登录成功 username: default");
         }
+      } else {
+        const u = sessionData.session.user;
+        const display = u?.user_metadata?.username || u?.user_metadata?.nickName || u?.email || u?.phone || u?.id || "anonymous";
+        console.log("[Auth] 已有会话，当前用户：", display);
       }
     } catch (e) {
-      console.warn("TCB 登录失败，使用本地模式：", e);
+      console.warn("[Auth] TCB 登录失败，使用本地模式：", e);
       loadNotesFromLocal();
       render();
       return;
@@ -1195,21 +1202,29 @@
         if (resp.ok) {
           const data = await resp.json();
           const cloudNotes = Array.isArray(data) ? data : [];
+          console.log(`[Storage] 云端 notebook.json 读取成功，条目数：${cloudNotes.length}`);
           notes = mergeNotes(cloudNotes, localBeforeMerge);
+          console.log(`[Storage] 合并后条目数：${notes.length}（本地 ${localBeforeMerge.length} + 云端 ${cloudNotes.length}）`);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
           setSyncBadge("online");
           // 若合并结果与云端不一致，上传合并后的完整数据，保证云上也是最新合并版
           if (JSON.stringify(cloudNotes) !== JSON.stringify(notes)) {
+            console.log("[Storage] 云端与本地有差异，回写合并结果到云存储…");
             try {
               const blob = new Blob([JSON.stringify(notes)], { type: "application/json" });
               const file = new File([blob], "notebook.json", { type: "application/json" });
               await tcbApp.uploadFile({ cloudPath: CLOUD_PATH, filePath: file });
-            } catch (e) { console.warn("合并后回写云存储失败：", e); }
+              console.log("[Storage] 回写完成");
+            } catch (e) { console.warn("[Storage] 合并后回写云存储失败：", e); }
           }
+        } else {
+          console.warn("[Storage] 云端文件请求失败，HTTP:", resp.status);
         }
+      } else {
+        console.warn("[Storage] 获取临时链接失败：", item);
       }
     } catch (err) {
-      console.warn("云存储读取失败，使用本地数据：", err);
+      console.warn("[Storage] 云存储读取失败，使用本地数据：", err);
       setSyncBadge("offline");
     }
     render();
