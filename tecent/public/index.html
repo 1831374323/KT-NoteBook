@@ -628,8 +628,10 @@
   const tcbAuth = tcbApp.auth();
   const CLOUD_PATH     = "notes/notebook.json";
   const STORAGE_KEY    = "study_notes_v1";
-  // fileID 由 uploadFile 返回后持久化，不再手动拼接（手动拼接会因 bucket 名不对而失败）
   const FILE_ID_KEY    = "cloud_file_id_v1";
+  // 兜底 fileID：格式为 cloud://{envId}.{envId}-{appId}/{path}
+  // appId 1313442109 取自域名 kt-notebook-5gzea6as40f0fb41-1313442109.tcloudbaseapp.com
+  const CLOUD_FILE_ID_DEFAULT = "cloud://kt-notebook-5gzea6as40f0fb41.kt-notebook-5gzea6as40f0fb41-1313442109/notes/notebook.json";
 
   /**
    * @typedef {Object} Note
@@ -1194,15 +1196,10 @@
     loadNotesFromLocal();
     const localBeforeMerge = notes.length ? notes.slice() : [];
 
-    // 优先使用上次上传时 SDK 返回并持久化的真实 fileID
-    const savedFileId = localStorage.getItem(FILE_ID_KEY);
-    if (!savedFileId) {
-      console.warn("[Storage] 本地尚无 fileID（首次使用或已清除），请先保存一条笔记以触发上传并获取 fileID。");
-      setSyncBadge("offline");
-      render();
-      return;
-    }
-    console.log("[Storage] 使用 fileID:", savedFileId);
+    // 优先使用上次上传时 SDK 返回并持久化的真实 fileID，否则用硬编码的兜底值
+    const savedFileId = localStorage.getItem(FILE_ID_KEY) || CLOUD_FILE_ID_DEFAULT;
+    console.log("[Storage] 使用 fileID:", savedFileId,
+      localStorage.getItem(FILE_ID_KEY) ? "(来自缓存)" : "(来自默认值，清除存储后首次加载)");
 
     try {
       // fileList 必须是字符串数组（fileID），不能是对象——官方 JS SDK 文档规范
@@ -1211,6 +1208,8 @@
       });
       const item = res.fileList[0];
       if (item.code === "SUCCESS" && item.tempFileURL) {
+        // 临时链接获取成功，将当前使用的 fileID 写入缓存（兜底默认值也一并持久化）
+        localStorage.setItem(FILE_ID_KEY, savedFileId);
         // 拼接时间戳破坏 CDN 缓存，保证读到的是最新上传的文件
         const freshUrl = item.tempFileURL + (item.tempFileURL.includes("?") ? "&" : "?") + "_t=" + Date.now();
         const resp = await fetch(freshUrl, { cache: "no-store" });
