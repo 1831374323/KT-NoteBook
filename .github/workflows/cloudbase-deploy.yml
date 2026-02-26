@@ -12,6 +12,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install CloudBase Framework Plugin
+        run: |
+          mkdir -p /home/runner/cloudbase-framework/registry
+          cd /home/runner/cloudbase-framework/registry
+          npm init -y
+          npm install @cloudbase/framework-plugin-website
+
       - name: Deploy to CloudBase
         uses: TencentCloudBase/cloudbase-action@v2
         with:
