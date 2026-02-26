@@ -1132,9 +1132,9 @@
         if (snapshot.docs && snapshot.docs.length > 0) {
           notes = snapshot.docs[0].data || [];
           if (!Array.isArray(notes)) notes = [];
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
         } else {
           loadNotesFromLocal();
-          if (notes.length > 0) saveNotes();
         }
         render();
       },
