@@ -629,9 +629,8 @@
   const CLOUD_PATH     = "notes/notebook.json";
   const STORAGE_KEY    = "study_notes_v1";
   const FILE_ID_KEY    = "cloud_file_id_v1";
-  // 兜底 fileID：格式为 cloud://{envId}.{envId}-{appId}/{path}
-  // appId 1313442109 取自域名 kt-notebook-5gzea6as40f0fb41-1313442109.tcloudbaseapp.com
-  const CLOUD_FILE_ID_DEFAULT = "cloud://kt-notebook-5gzea6as40f0fb41.kt-notebook-5gzea6as40f0fb41-1313442109/notes/notebook.json";
+  // 兜底 fileID：bucket 名称从控制台云存储列表确认为 6b74-kt-notebook-5gzea6as40f0fb41-1313442109
+  const CLOUD_FILE_ID_DEFAULT = "cloud://kt-notebook-5gzea6as40f0fb41.6b74-kt-notebook-5gzea6as40f0fb41-1313442109/notes/notebook.json";
 
   /**
    * @typedef {Object} Note
@@ -1236,21 +1235,10 @@
           console.warn("[Storage] 云端文件请求失败，HTTP:", resp.status);
         }
       } else if (item.code === "STORAGE_FILE_NONEXIST") {
-        // 文件在云端不存在（首次使用 / 文件被删除），用本地数据初始化并上传创建
-        console.log("[Storage] 云端文件不存在，将本地数据上传以初始化…");
-        try {
-          const blob = new Blob([JSON.stringify(localBeforeMerge)], { type: "application/json" });
-          const file = new File([blob], "notebook.json", { type: "application/json" });
-          const uploadRes = await tcbApp.uploadFile({ cloudPath: CLOUD_PATH, filePath: file });
-          if (uploadRes?.fileID) {
-            localStorage.setItem(FILE_ID_KEY, uploadRes.fileID);
-            console.log("[Storage] 初始化上传完成，fileID:", uploadRes.fileID);
-          }
-          setSyncBadge("online");
-        } catch (e) {
-          console.warn("[Storage] 初始化上传失败：", e);
-          setSyncBadge("error");
-        }
+        // 文件在云端确实不存在（真正首次 / 文件被手动删除），仅使用本地数据，不覆盖云端
+        // 待用户保存笔记时会触发 uploadFile 自动创建文件
+        console.log("[Storage] 云端文件不存在，使用本地数据（保存笔记后将自动创建云端文件）");
+        setSyncBadge("offline");
       } else {
         console.warn("[Storage] 获取临时链接失败：", item);
       }
