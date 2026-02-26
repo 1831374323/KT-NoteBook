@@ -618,10 +618,10 @@
 
 <script>
   // --- 腾讯云开发 TCB SDK ---
-  const tcbApp     = cloudbase.init({ env: "kt-notebook-5gzea6as40f0fb41" });
-  const tcbAuth    = tcbApp.auth({ persistence: "local" });
-  const tcbDB      = tcbApp.database();
-  const notesDoc   = tcbDB.collection("notes").doc("notebook");
+  const tcbApp        = cloudbase.init({ env: "kt-notebook-5gzea6as40f0fb41" });
+  const tcbAuth       = tcbApp.auth({ persistence: "local" });
+  const CLOUD_PATH    = "notes/notebook.json";
+  const CLOUD_FILE_ID = "cloud://kt-notebook-5gzea6as40f0fb41/" + CLOUD_PATH;
 
   // --- 数据结构与存储 ---
   const STORAGE_KEY = "study_notes_v1";
@@ -662,12 +662,18 @@
     el.className   = "sync-badge " + s.cls;
   }
 
-  function saveNotes() {
+  async function saveNotes() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
     setSyncBadge("syncing");
-    notesDoc.set({ data: notes })
-      .then(() => setSyncBadge("online"))
-      .catch(err => { console.error("TCB 写入失败：", err); setSyncBadge("error"); });
+    try {
+      const blob = new Blob([JSON.stringify(notes)], { type: "application/json" });
+      const file = new File([blob], "notebook.json", { type: "application/json" });
+      await tcbApp.uploadFile({ cloudPath: CLOUD_PATH, filePath: file });
+      setSyncBadge("online");
+    } catch (err) {
+      console.error("云存储写入失败：", err);
+      setSyncBadge("error");
+    }
   }
 
   function loadNotesFromLocal() {
@@ -1125,25 +1131,31 @@
       return;
     }
 
-    // 实时监听 TCB 文档（登录成功后才启动）
-    notesDoc.watch({
-      onChange(snapshot) {
-        if (snapshot.docs && snapshot.docs.length > 0) {
-          notes = snapshot.docs[0].data || [];
-          if (!Array.isArray(notes)) notes = [];
+    // 从云存储读取笔记
+    try {
+      const res = await tcbApp.getTempFileURL({
+        fileList: [{ fileID: CLOUD_FILE_ID, maxAge: 3600 }]
+      });
+      const item = res.fileList[0];
+      if (item.code === "SUCCESS" && item.tempFileURL) {
+        const resp = await fetch(item.tempFileURL);
+        if (resp.ok) {
+          const data = await resp.json();
+          notes = Array.isArray(data) ? data : [];
           localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+          setSyncBadge("online");
         } else {
           loadNotesFromLocal();
         }
-        render();
-      },
-      onError(err) {
-        console.error("TCB 监听失败：", err);
-        setSyncBadge("error");
+      } else {
         loadNotesFromLocal();
-        render();
-      },
-    });
+      }
+    } catch (err) {
+      console.warn("云存储读取失败，使用本地数据：", err);
+      loadNotesFromLocal();
+      setSyncBadge("offline");
+    }
+    render();
   }
 
   init();
