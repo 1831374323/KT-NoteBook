@@ -513,6 +513,8 @@
       font-style: italic;
     }
   </style>
+  <!-- 腾讯云开发 Web SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@cloudbase/js-sdk@2/dist/tcb.js"></script>
 </head>
 <body>
 <div class="app">
@@ -614,26 +616,12 @@
   </div>
 </div>
 
-<script type="module">
-  // --- Firebase 模块化 SDK ---
-  import { initializeApp }                              from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
-  import { getAnalytics }                               from "https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics.js";
-  import { getFirestore, doc, setDoc, onSnapshot }      from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
-
-  const firebaseConfig = {
-    apiKey:            "AIzaSyCrcnXOzSI4awUz7_XBHfYyfNfI87y7TK0",
-    authDomain:        "kt-notebook.firebaseapp.com",
-    projectId:         "kt-notebook",
-    storageBucket:     "kt-notebook.firebasestorage.app",
-    messagingSenderId: "261897773356",
-    appId:             "1:261897773356:web:c84da0edca4784ee14cc89",
-    measurementId:     "G-BGS5BMLKJG",
-  };
-
-  const app       = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
-  const db        = getFirestore(app);
-  const notesDoc  = doc(db, "notebook", "notes");
+<script>
+  // --- 腾讯云开发 TCB SDK ---
+  const tcbApp     = cloudbase.init({ env: "kt-notebook-5gzea6as40f0fb41" });
+  const tcbAuth    = tcbApp.auth({ persistence: "local" });
+  const tcbDB      = tcbApp.database();
+  const notesDoc   = tcbDB.collection("notes").doc("notebook");
 
   // --- 数据结构与存储 ---
   const STORAGE_KEY = "study_notes_v1";
@@ -677,9 +665,9 @@
   function saveNotes() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
     setSyncBadge("syncing");
-    setDoc(notesDoc, { data: notes })
+    notesDoc.set({ data: notes })
       .then(() => setSyncBadge("online"))
-      .catch(err => { console.error("Firestore 写入失败：", err); setSyncBadge("error"); });
+      .catch(err => { console.error("TCB 写入失败：", err); setSyncBadge("error"); });
   }
 
   function loadNotesFromLocal() {
@@ -1113,28 +1101,40 @@
   });
 
   // --- 初始化 ---
-  function init() {
+  async function init() {
     dateInput.value = getTodayStr();
 
-    // 网络连接状态（Firestore 用浏览器原生事件监听）
     window.addEventListener("online",  () => setSyncBadge("online"));
     window.addEventListener("offline", () => setSyncBadge("offline"));
 
-    // 实时监听 Firestore 文档（首次加载 + 多端实时推送）
-    onSnapshot(notesDoc, (snap) => {
-      if (snap.exists()) {
-        notes = snap.data().data || [];
-      } else {
-        // Firestore 无数据时，将 localStorage 旧数据一次性迁移上去
-        loadNotesFromLocal();
-        if (notes.length > 0) saveNotes();
+    // 用户名密码登录（已登录则复用，避免重复登录）
+    try {
+      const state = await tcbAuth.getLoginState();
+      if (!state) {
+        await tcbAuth.signInWithUsernameAndPassword("default", "Default1234");
       }
-      render();
-    }, (err) => {
-      console.error("Firestore 监听失败：", err);
-      setSyncBadge("error");
-      loadNotesFromLocal();
-      render();
+    } catch (e) {
+      console.warn("TCB 登录失败：", e);
+    }
+
+    // 实时监听 TCB 文档（首次加载 + 多端实时推送）
+    notesDoc.watch({
+      onChange(snapshot) {
+        if (snapshot.docs && snapshot.docs.length > 0) {
+          notes = snapshot.docs[0].data || [];
+          if (!Array.isArray(notes)) notes = [];
+        } else {
+          loadNotesFromLocal();
+          if (notes.length > 0) saveNotes();
+        }
+        render();
+      },
+      onError(err) {
+        console.error("TCB 监听失败：", err);
+        setSyncBadge("error");
+        loadNotesFromLocal();
+        render();
+      },
     });
   }
 
