@@ -1,4 +1,4 @@
-name: Deploy to CloudBase
+name: Deploy to CloudBase Static Hosting
 
 on:
   push:
@@ -8,20 +8,18 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install CloudBase Framework Plugin
-        run: |
-          mkdir -p /home/runner/cloudbase-framework/registry
-          cd /home/runner/cloudbase-framework/registry
-          npm init -y
-          npm install @cloudbase/framework-plugin-website
-
-      - name: Deploy to CloudBase
-        uses: TencentCloudBase/cloudbase-action@v2
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          secretId: ${{ secrets.CLOUDBASE_SECRET_ID }}
-          secretKey: ${{ secrets.CLOUDBASE_SECRET_KEY }}
-          envId: kt-notebook-5gzea6as40f0fb41
+          node-version: '18'
+
+      - name: Install CloudBase CLI
+        run: npm install -g @cloudbase/cli
+
+      - name: Deploy to CloudBase Static Hosting
+        run: tcb hosting deploy ./tecent/public / -e ${{ secrets.TCB_ENV_ID }} --secretId ${{ secrets.CLOUDBASE_SECRET_ID }} --secretKey ${{ secrets.CLOUDBASE_SECRET_KEY }}
