@@ -1167,12 +1167,15 @@
     loadNotesFromLocal();
     const localBeforeMerge = notes.length ? notes.slice() : [];
     try {
+      // fileList 必须是字符串数组（fileID），不能是对象——官方 JS SDK 文档规范
       const res = await tcbApp.getTempFileURL({
-        fileList: [{ fileID: CLOUD_FILE_ID, maxAge: 3600 }]
+        fileList: [CLOUD_FILE_ID]
       });
       const item = res.fileList[0];
       if (item.code === "SUCCESS" && item.tempFileURL) {
-        const resp = await fetch(item.tempFileURL);
+        // 拼接时间戳破坏 CDN 缓存，保证读到的是最新上传的文件
+        const freshUrl = item.tempFileURL + (item.tempFileURL.includes("?") ? "&" : "?") + "_t=" + Date.now();
+        const resp = await fetch(freshUrl, { cache: "no-store" });
         if (resp.ok) {
           const data = await resp.json();
           const cloudNotes = Array.isArray(data) ? data : [];
