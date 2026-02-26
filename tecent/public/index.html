@@ -1235,6 +1235,22 @@
         } else {
           console.warn("[Storage] 云端文件请求失败，HTTP:", resp.status);
         }
+      } else if (item.code === "STORAGE_FILE_NONEXIST") {
+        // 文件在云端不存在（首次使用 / 文件被删除），用本地数据初始化并上传创建
+        console.log("[Storage] 云端文件不存在，将本地数据上传以初始化…");
+        try {
+          const blob = new Blob([JSON.stringify(localBeforeMerge)], { type: "application/json" });
+          const file = new File([blob], "notebook.json", { type: "application/json" });
+          const uploadRes = await tcbApp.uploadFile({ cloudPath: CLOUD_PATH, filePath: file });
+          if (uploadRes?.fileID) {
+            localStorage.setItem(FILE_ID_KEY, uploadRes.fileID);
+            console.log("[Storage] 初始化上传完成，fileID:", uploadRes.fileID);
+          }
+          setSyncBadge("online");
+        } catch (e) {
+          console.warn("[Storage] 初始化上传失败：", e);
+          setSyncBadge("error");
+        }
       } else {
         console.warn("[Storage] 获取临时链接失败：", item);
       }
