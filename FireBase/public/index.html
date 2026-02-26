@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>学习日志笔记本</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --primary: #4f46e5;
+      --primary-soft: #eef2ff;
+      --bg: #f4f4f5;
+      --border: #e4e4e7;
+      --text-main: #18181b;
+      --text-sub: #71717a;
+      --danger: #ef4444;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at top left, #eef2ff 0, #f4f4f5 45%, #fafafa 100%);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .app {
+      max-width: 1200px;
+      width: 100%;
+      margin: 4vh auto;
+      padding: 24px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    header h1 {
+      font-size: 26px;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    header h1 span.logo-dot {
+      width: 13px;
+      height: 13px;
+      border-radius: 999px;
+      background: var(--primary);
+      display: inline-block;
+    }
+
+    header .controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    header label {
+      font-size: 15px;
+      color: var(--text-sub);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    input[type="date"] {
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      font-size: 15px;
+      background: white;
+    }
+
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 8px 18px;
+      font-size: 14px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+
+    button.primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    button.outline {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-sub);
+    }
+
+    button.small {
+      padding: 5px 12px;
+      font-size: 13px;
+    }
+
+    main {
+      display: flex;
+      gap: 0;
+      align-items: stretch;
+    }
+
+    .pane-left,
+    .pane-right {
+      min-width: 200px;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    .pane-left {
+      flex: 1.2;
+    }
+
+    .pane-right {
+      flex: 1;
+    }
+
+    .resize-handle {
+      width: 14px;
+      flex-shrink: 0;
+      cursor: col-resize;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      user-select: none;
+    }
+
+    .resize-handle::after {
+      content: '';
+      width: 3px;
+      height: 44px;
+      background: var(--border);
+      border-radius: 3px;
+      transition: background 0.2s, transform 0.2s;
+    }
+
+    .resize-handle:hover::after,
+    .resize-handle.dragging::after {
+      background: var(--primary);
+      transform: scaleX(1.5);
+    }
+
+    @media (max-width: 800px) {
+      main {
+        flex-direction: column;
+      }
+
+      .pane-left,
+      .pane-right {
+        width: 100% !important;
+        flex: none !important;
+      }
+
+      .resize-handle {
+        display: none;
+      }
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 16px;
+      border: 1px solid rgba(228, 228, 231, 0.9);
+      padding: 20px 22px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+      backdrop-filter: blur(12px);
+    }
+
+    .card h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--text-main);
+    }
+
+    .card h2 span.sub {
+      font-size: 14px;
+      color: var(--text-sub);
+      font-weight: normal;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 180px;
+      resize: vertical;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      font-size: 16px;
+      line-height: 1.6;
+      font-family: inherit;
+    }
+
+    textarea:focus,
+    input[type="date"]:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.2);
+    }
+
+    .card-footer {
+      margin-top: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .hint {
+      font-size: 13px;
+      color: var(--text-sub);
+    }
+
+    .hint code {
+      background: var(--bg);
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    .section {
+      margin-top: 12px;
+    }
+
+    .section-title {
+      font-size: 14px;
+      color: var(--text-sub);
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tags-container,
+    .note-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .tag-chip {
+      font-size: 13px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: white;
+      color: var(--text-sub);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .tag-chip.active {
+      background: var(--primary-soft);
+      border-color: var(--primary);
+      color: var(--primary);
+      font-weight: 500;
+    }
+
+    .tag-chip span.count {
+      font-size: 12px;
+      opacity: 0.7;
+    }
+
+    .note-list {
+      margin-top: 6px;
+      max-height: 460px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .note-item {
+      border-radius: 12px;
+      border: 1px solid #e4e4e7;
+      padding: 10px 14px;
+      margin-bottom: 10px;
+      background: #fdfdfd;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .note-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      color: var(--text-sub);
+    }
+
+    .note-date {
+      font-weight: 500;
+    }
+
+    .note-body {
+      font-size: 15px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .note-tags {
+      margin-top: 2px;
+    }
+
+    .note-tags .tag-chip {
+      cursor: pointer;
+      border-radius: 999px;
+      background: var(--primary-soft);
+      border-color: transparent;
+      color: var(--primary);
+      font-size: 12px;
+    }
+
+    .note-empty {
+      font-size: 14px;
+      color: var(--text-sub);
+      padding: 16px 4px;
+      text-align: center;
+    }
+
+    .filter-info {
+      font-size: 13px;
+      color: var(--text-sub);
+    }
+
+    .danger-link {
+      font-size: 12px;
+      color: var(--danger);
+      cursor: pointer;
+      text-decoration: underline;
+      opacity: 0.7;
+    }
+
+    .sync-badge {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: background 0.3s, color 0.3s, border-color 0.3s;
+      white-space: nowrap;
+    }
+    .sync-online  { background: #f0fdf4; color: #16a34a; border-color: #86efac; }
+    .sync-offline { background: #fafafa; color: var(--text-sub); border-color: var(--border); }
+    .sync-syncing { background: #eff6ff; color: #2563eb; border-color: #93c5fd; }
+    .sync-error   { background: #fef2f2; color: var(--danger); border-color: #fca5a5; }
+
+    /* --- 标签选择弹窗 --- */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.4);
+      backdrop-filter: blur(5px);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      animation: fadeIn 0.15s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+
+    .modal-card {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
+      width: 100%;
+      max-width: 500px;
+      padding: 26px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      animation: slideUp 0.18s ease;
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(12px); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
+
+    .modal-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-main);
+      margin: 0 0 4px;
+    }
+
+    .modal-preview {
+      font-size: 13px;
+      color: var(--text-sub);
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 8px 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.4;
+    }
+
+    .modal-section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .modal-section-label {
+      font-size: 12px;
+      color: var(--text-sub);
+      font-weight: 500;
+    }
+
+    .modal-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      min-height: 30px;
+    }
+
+    .modal-tag {
+      font-size: 13px;
+      padding: 5px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: white;
+      color: var(--text-sub);
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+    }
+
+    .modal-tag.selected {
+      background: var(--primary-soft);
+      border-color: var(--primary);
+      color: var(--primary);
+      font-weight: 500;
+    }
+
+    .modal-tag.custom {
+      background: #f0fdf4;
+      border-color: #86efac;
+      color: #16a34a;
+    }
+
+    .modal-tag.custom.selected {
+      background: #dcfce7;
+      border-color: #4ade80;
+      color: #15803d;
+    }
+
+    .modal-custom-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .modal-custom-row input {
+      flex: 1;
+      padding: 7px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .modal-custom-row input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      padding-top: 6px;
+      border-top: 1px solid var(--border);
+    }
+
+    .modal-empty-hint {
+      font-size: 12px;
+      color: var(--text-sub);
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>
+      <span class="logo-dot"></span>
+      学习日志 · 笔记本
+    </h1>
+    <div class="controls">
+      <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
+      <label>
+        日期
+        <input id="dateInput" type="date" />
+      </label>
+      <button id="todayBtn" class="outline small">跳到今天</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- 左侧：写笔记 -->
+    <section class="card pane-left" id="paneLeft">
+      <h2>
+        写今天的学习日志
+        <span class="sub" id="charCount">0 字</span>
+      </h2>
+      <textarea id="noteInput" placeholder="今天学了什么？遇到什么问题？用自己的话总结一下吧～&#10;Tips: 输入 #标签 形式的关键词，会自动成为 tag，例如：#Unity #算法 #阅读"></textarea>
+      <div class="card-footer">
+        <div class="hint">
+          自动提取标签规则：
+          <code>#标签</code> +
+          <code>英文关键词</code>（按出现频率排序） +
+          <code>包含已有标签文本</code>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button id="saveBtn" class="primary">保存日志</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="resize-handle" id="resizeHandle" title="拖拽调节宽度"></div>
+
+    <!-- 右侧：tag & 笔记列表 -->
+    <section class="card pane-right" id="paneRight">
+      <h2>
+        笔记与标签
+        <span class="sub" id="noteSummary">共 0 条笔记</span>
+      </h2>
+
+      <div class="section">
+        <div class="section-title">
+          <span>自动标签（左键筛选 / 右键删除）</span>
+          <div class="filter-info" id="filterInfo">未筛选</div>
+        </div>
+        <div class="tags-container" id="tagList"></div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">
+          <span>笔记列表</span>
+          <span class="danger-link" id="clearAllBtn">清空所有数据</span>
+        </div>
+        <div class="note-list" id="noteList"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- 标签选择弹窗 -->
+<div id="tagModal" class="modal-overlay" style="display:none;">
+  <div class="modal-card">
+    <div>
+      <div class="modal-title">确认标签</div>
+      <div class="modal-preview" id="modalPreview"></div>
+    </div>
+
+    <div class="modal-section" id="modalAutoSection">
+      <div class="modal-section-label">自动提取（已预选，可取消）</div>
+      <div class="modal-tags" id="modalAutoTags"></div>
+    </div>
+
+    <div class="modal-section" id="modalExistingSection">
+      <div class="modal-section-label">已有标签（点击添加）</div>
+      <div class="modal-tags" id="modalExistingTags"></div>
+    </div>
+
+    <div class="modal-section">
+      <div class="modal-section-label">自定义标签</div>
+      <div class="modal-custom-row">
+        <input type="text" id="modalCustomInput" placeholder="输入新标签，回车或点击添加" maxlength="20" />
+        <button id="modalAddBtn" class="outline small">添加</button>
+      </div>
+      <div class="modal-tags" id="modalCustomTags"></div>
+    </div>
+
+    <div class="modal-footer">
+      <button id="modalCancelBtn" class="outline">取消</button>
+      <button id="modalConfirmBtn" class="primary">保存笔记</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  // --- Firebase 模块化 SDK ---
+  import { initializeApp }                              from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
+  import { getAnalytics }                               from "https://www.gstatic.com/firebasejs/12.9.0/firebase-analytics.js";
+  import { getFirestore, doc, setDoc, onSnapshot }      from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey:            "AIzaSyCrcnXOzSI4awUz7_XBHfYyfNfI87y7TK0",
+    authDomain:        "kt-notebook.firebaseapp.com",
+    projectId:         "kt-notebook",
+    storageBucket:     "kt-notebook.firebasestorage.app",
+    messagingSenderId: "261897773356",
+    appId:             "1:261897773356:web:c84da0edca4784ee14cc89",
+    measurementId:     "G-BGS5BMLKJG",
+  };
+
+  const app       = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+  const db        = getFirestore(app);
+  const notesDoc  = doc(db, "notebook", "notes");
+
+  // --- 数据结构与存储 ---
+  const STORAGE_KEY = "study_notes_v1";
+
+  /**
+   * @typedef {Object} Note
+   * @property {number} id
+   * @property {string} date YYYY-MM-DD
+   * @property {string} text
+   * @property {string[]} tags
+   * @property {number} createdAt
+   */
+
+  /** @type {Note[]} */
+  let notes = [];
+  let activeTag = null;
+
+  // --- 工具函数 ---
+  function getTodayStr() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  function setSyncBadge(state) {
+    const el = document.getElementById("syncBadge");
+    if (!el) return;
+    const map = {
+      online:  { text: "● 已同步",  cls: "sync-online"  },
+      offline: { text: "○ 离线",    cls: "sync-offline" },
+      syncing: { text: "↑ 同步中…", cls: "sync-syncing" },
+      error:   { text: "✕ 同步失败", cls: "sync-error"  },
+    };
+    const s = map[state] || map.offline;
+    el.textContent = s.text;
+    el.className   = "sync-badge " + s.cls;
+  }
+
+  function saveNotes() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+    setSyncBadge("syncing");
+    setDoc(notesDoc, { data: notes })
+      .then(() => setSyncBadge("online"))
+      .catch(err => { console.error("Firestore 写入失败：", err); setSyncBadge("error"); });
+  }
+
+  function loadNotesFromLocal() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      notes = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(notes)) notes = [];
+    } catch (e) { notes = []; }
+  }
+
+  // 获取当前所有已有标签
+  function getAllExistingTags() {
+    const set = new Set();
+    for (const n of notes) {
+      if (Array.isArray(n.tags)) {
+        for (const t of n.tags) {
+          if (t) set.add(t);
+        }
+      }
+    }
+    return Array.from(set);
+  }
+
+  // 简单的标签提取：#标签 + 高频英文单词 + 文本中出现的已有标签
+  function extractTagsFromText(text, existingTags = []) {
+    const tagsSet = new Set();
+
+    // 1) 识别 #标签
+    const hashTagRegex = /#([\p{L}\d_]{1,20})/gu;
+    let match;
+    while ((match = hashTagRegex.exec(text)) !== null) {
+      tagsSet.add(match[1]);
+    }
+
+    // 2) 英文关键词（按频率统计）
+    const lower = text.toLowerCase();
+    const words = lower.match(/[a-z]{3,}/g) || [];
+    const stopwords = new Set([
+      "the", "and", "for", "with", "that", "this",
+      "you", "are", "not", "but", "all", "any",
+      "can", "your", "from", "have", "has", "will",
+      "just", "about", "into", "more", "when", "then",
+    ]);
+    const freq = new Map();
+    for (const w of words) {
+      if (stopwords.has(w)) continue;
+      freq.set(w, (freq.get(w) || 0) + 1);
+    }
+
+    const sorted = [...freq.entries()].sort((a, b) => b[1] - a[1]);
+    for (let i = 0; i < sorted.length && i < 5; i++) {
+      const word = sorted[i][0];
+      tagsSet.add(word);
+    }
+
+    // 3) 文本中出现的已有标签
+    const lowerText = text.toLowerCase();
+    for (const tag of existingTags) {
+      if (!tag) continue;
+      if (lowerText.includes(tag.toLowerCase())) {
+        tagsSet.add(tag);
+      }
+    }
+
+    return Array.from(tagsSet);
+  }
+
+  // --- DOM 引用 ---
+  const dateInput = document.getElementById("dateInput");
+  const noteInput = document.getElementById("noteInput");
+  const saveBtn = document.getElementById("saveBtn");
+  const todayBtn = document.getElementById("todayBtn");
+  const charCount = document.getElementById("charCount");
+  const tagListEl = document.getElementById("tagList");
+  const noteListEl = document.getElementById("noteList");
+  const noteSummaryEl = document.getElementById("noteSummary");
+  const filterInfoEl = document.getElementById("filterInfo");
+  const clearAllBtn = document.getElementById("clearAllBtn");
+
+  // 删除某个标签：从所有笔记中移除
+  function deleteTagEverywhere(tagToDelete) {
+    let changed = false;
+    for (const note of notes) {
+      if (Array.isArray(note.tags) && note.tags.includes(tagToDelete)) {
+        note.tags = note.tags.filter((t) => t !== tagToDelete);
+        changed = true;
+      }
+    }
+    if (changed) {
+      saveNotes();
+    }
+    if (activeTag === tagToDelete) {
+      activeTag = null;
+    }
+    render();
+  }
+
+  // 给 tag 绑定事件：左键筛选，右键删除
+  function attachTagEvents(tagElement, tag) {
+    // 左键点击：筛选
+    tagElement.addEventListener("click", (e) => {
+      if (e.button !== 0) return;
+      if (activeTag === tag) {
+        activeTag = null;
+      } else {
+        activeTag = tag;
+      }
+      render();
+    });
+
+    // 右键：删除 tag（所有笔记）
+    tagElement.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      const ok = confirm(`从所有笔记中删除标签「${tag}」？`);
+      if (!ok) return;
+      deleteTagEverywhere(tag);
+    });
+  }
+
+  // --- 渲染 ---
+  function render() {
+    renderSummary();
+    renderTags();
+    renderNotes();
+  }
+
+  function renderSummary() {
+    noteSummaryEl.textContent = `共 ${notes.length} 条笔记`;
+    if (activeTag) {
+      filterInfoEl.textContent = `按标签「${activeTag}」筛选中`;
+    } else {
+      filterInfoEl.textContent = "未筛选";
+    }
+  }
+
+  function renderTags() {
+    const tagCount = new Map();
+    for (const n of notes) {
+      for (const t of n.tags || []) {
+        tagCount.set(t, (tagCount.get(t) || 0) + 1);
+      }
+    }
+
+    tagListEl.innerHTML = "";
+    if (tagCount.size === 0) {
+      const span = document.createElement("span");
+      span.className = "hint";
+      span.textContent = "暂无标签，写几条日志试试吧～";
+      tagListEl.appendChild(span);
+      return;
+    }
+
+    const sortedTags = [...tagCount.entries()].sort((a, b) => b[1] - a[1]);
+
+    for (const [tag, count] of sortedTags) {
+      const div = document.createElement("div");
+      div.className = "tag-chip" + (activeTag === tag ? " active" : "");
+      div.textContent = tag;
+
+      const countSpan = document.createElement("span");
+      countSpan.className = "count";
+      countSpan.textContent = `×${count}`;
+      div.appendChild(countSpan);
+
+      attachTagEvents(div, tag);
+      tagListEl.appendChild(div);
+    }
+  }
+
+  function renderNotes() {
+    noteListEl.innerHTML = "";
+    let list = notes.slice();
+
+    list.sort((a, b) => b.createdAt - a.createdAt);
+
+    if (activeTag) {
+      list = list.filter((n) => n.tags && n.tags.includes(activeTag));
+    }
+
+    if (list.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "note-empty";
+      empty.textContent = activeTag
+        ? "当前标签下还没有笔记～"
+        : "还没有任何笔记，试着写一条吧。";
+      noteListEl.appendChild(empty);
+      return;
+    }
+
+    for (const note of list) {
+      const item = document.createElement("div");
+      item.className = "note-item";
+
+      const header = document.createElement("div");
+      header.className = "note-header";
+
+      const dateSpan = document.createElement("span");
+      dateSpan.className = "note-date";
+      dateSpan.textContent = note.date;
+
+      const metaSpan = document.createElement("span");
+      const d = new Date(note.createdAt);
+      metaSpan.textContent = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+      header.appendChild(dateSpan);
+      header.appendChild(metaSpan);
+
+      const body = document.createElement("div");
+      body.className = "note-body";
+      body.textContent = note.text;
+
+      item.appendChild(header);
+      item.appendChild(body);
+
+      if (note.tags && note.tags.length > 0) {
+        const tagContainer = document.createElement("div");
+        tagContainer.className = "note-tags";
+
+        for (const t of note.tags) {
+          const tagEl = document.createElement("span");
+          tagEl.className = "tag-chip small";
+          tagEl.textContent = t;
+
+          attachTagEvents(tagEl, t);
+          tagContainer.appendChild(tagEl);
+        }
+        item.appendChild(tagContainer);
+      }
+
+      noteListEl.appendChild(item);
+    }
+  }
+
+  // --- 标签选择弹窗 ---
+  const tagModalEl      = document.getElementById("tagModal");
+  const modalPreviewEl  = document.getElementById("modalPreview");
+  const modalAutoEl     = document.getElementById("modalAutoTags");
+  const modalExistEl    = document.getElementById("modalExistingTags");
+  const modalCustomEl   = document.getElementById("modalCustomTags");
+  const modalCustomInput = document.getElementById("modalCustomInput");
+  const modalAutoSection  = document.getElementById("modalAutoSection");
+  const modalExistSection = document.getElementById("modalExistingSection");
+
+  // 弹窗状态
+  const modal = {
+    pendingText: "",
+    pendingDate: "",
+    selectedSet: new Set(),
+    customTags: [],
+  };
+
+  function renderModalTagList(container, tags, isCustom = false) {
+    container.innerHTML = "";
+    if (tags.length === 0) {
+      const hint = document.createElement("span");
+      hint.className = "modal-empty-hint";
+      hint.textContent = "（无）";
+      container.appendChild(hint);
+      return;
+    }
+    for (const tag of tags) {
+      const chip = document.createElement("span");
+      chip.className = "modal-tag" + (isCustom ? " custom" : "") + (modal.selectedSet.has(tag) ? " selected" : "");
+      chip.textContent = tag;
+      chip.addEventListener("click", () => {
+        if (modal.selectedSet.has(tag)) {
+          modal.selectedSet.delete(tag);
+        } else {
+          modal.selectedSet.add(tag);
+        }
+        chip.classList.toggle("selected", modal.selectedSet.has(tag));
+      });
+      container.appendChild(chip);
+    }
+  }
+
+  function openTagModal(text, date) {
+    modal.pendingText = text;
+    modal.pendingDate = date;
+    modal.customTags  = [];
+    modal.selectedSet = new Set();
+
+    // 自动提取并预选
+    const existingTags = getAllExistingTags();
+    const autoTags     = extractTagsFromText(text, existingTags);
+    autoTags.forEach(t => modal.selectedSet.add(t));
+
+    // 已有标签中排除自动提取的
+    const extraExisting = existingTags.filter(t => !autoTags.includes(t));
+
+    // 预览文本
+    modalPreviewEl.textContent = text.length > 80 ? text.slice(0, 80) + "…" : text;
+
+    // 渲染各区域
+    modalAutoSection.style.display = autoTags.length ? "" : "none";
+    renderModalTagList(modalAutoEl, autoTags, false);
+
+    modalExistSection.style.display = extraExisting.length ? "" : "none";
+    renderModalTagList(modalExistEl, extraExisting, false);
+
+    modalCustomEl.innerHTML = "";
+    modalCustomInput.value  = "";
+
+    tagModalEl.style.display = "flex";
+    setTimeout(() => modalCustomInput.focus(), 50);
+  }
+
+  function closeTagModal() {
+    tagModalEl.style.display = "none";
+    modal.pendingText = "";
+    modal.pendingDate = "";
+  }
+
+  function addCustomTag() {
+    const val = modalCustomInput.value.trim();
+    if (!val) return;
+    if (modal.customTags.includes(val) || modal.selectedSet.has(val)) {
+      modalCustomInput.value = "";
+      return;
+    }
+    modal.customTags.push(val);
+    modal.selectedSet.add(val);
+    renderModalTagList(modalCustomEl, modal.customTags, true);
+    modalCustomInput.value = "";
+    modalCustomInput.focus();
+  }
+
+  document.getElementById("modalAddBtn").addEventListener("click", addCustomTag);
+
+  modalCustomInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); addCustomTag(); }
+  });
+
+  document.getElementById("modalCancelBtn").addEventListener("click", closeTagModal);
+
+  // 点击遮罩关闭
+  tagModalEl.addEventListener("click", (e) => {
+    if (e.target === tagModalEl) closeTagModal();
+  });
+
+  document.getElementById("modalConfirmBtn").addEventListener("click", () => {
+    const finalTags = Array.from(modal.selectedSet);
+    const newNote = {
+      id: Date.now(),
+      date: modal.pendingDate,
+      text: modal.pendingText,
+      tags: finalTags,
+      createdAt: Date.now(),
+    };
+    notes.push(newNote);
+    saveNotes();
+    noteInput.value  = "";
+    charCount.textContent = "0 字";
+    closeTagModal();
+    render();
+  });
+
+  // --- 事件绑定 ---
+  saveBtn.addEventListener("click", () => {
+    const text = noteInput.value.trim();
+    const date = dateInput.value || getTodayStr();
+
+    if (!text) {
+      alert("内容为空，先写点东西再保存吧～");
+      return;
+    }
+
+    openTagModal(text, date);
+  });
+
+  noteInput.addEventListener("input", () => {
+    const len = noteInput.value.length;
+    charCount.textContent = `${len} 字`;
+  });
+
+  todayBtn.addEventListener("click", () => {
+    dateInput.value = getTodayStr();
+  });
+
+  clearAllBtn.addEventListener("click", () => {
+    if (notes.length === 0) return;
+    const ok = confirm("确定要清空所有笔记吗？此操作不可恢复。");
+    if (!ok) return;
+    notes = [];
+    saveNotes();
+    activeTag = null;
+    render();
+  });
+
+  // --- 面板拖拽调节 ---
+  const resizeHandle = document.getElementById("resizeHandle");
+  const paneLeft = document.getElementById("paneLeft");
+  const paneRight = document.getElementById("paneRight");
+  const mainEl = document.querySelector("main");
+
+  let isResizing = false;
+  let resizeStartX = 0;
+  let resizeStartLeftWidth = 0;
+  let resizeStartRightWidth = 0;
+
+  resizeHandle.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    isResizing = true;
+    resizeStartX = e.clientX;
+    resizeStartLeftWidth = paneLeft.offsetWidth;
+    resizeStartRightWidth = paneRight.offsetWidth;
+    resizeHandle.classList.add("dragging");
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (!isResizing) return;
+    const dx = e.clientX - resizeStartX;
+    const minWidth = 200;
+    const maxLeft = resizeStartLeftWidth + resizeStartRightWidth - minWidth;
+    let newLeft = Math.max(minWidth, Math.min(maxLeft, resizeStartLeftWidth + dx));
+    let newRight = resizeStartLeftWidth + resizeStartRightWidth - newLeft;
+    paneLeft.style.flex = "none";
+    paneRight.style.flex = "none";
+    paneLeft.style.width = newLeft + "px";
+    paneRight.style.width = newRight + "px";
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!isResizing) return;
+    isResizing = false;
+    resizeHandle.classList.remove("dragging");
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  });
+
+  // --- 初始化 ---
+  function init() {
+    dateInput.value = getTodayStr();
+
+    // 网络连接状态（Firestore 用浏览器原生事件监听）
+    window.addEventListener("online",  () => setSyncBadge("online"));
+    window.addEventListener("offline", () => setSyncBadge("offline"));
+
+    // 实时监听 Firestore 文档（首次加载 + 多端实时推送）
+    onSnapshot(notesDoc, (snap) => {
+      if (snap.exists()) {
+        notes = snap.data().data || [];
+      } else {
+        // Firestore 无数据时，将 localStorage 旧数据一次性迁移上去
+        loadNotesFromLocal();
+        if (notes.length > 0) saveNotes();
+      }
+      render();
+    }, (err) => {
+      console.error("Firestore 监听失败：", err);
+      setSyncBadge("error");
+      loadNotesFromLocal();
+      render();
+    });
+  }
+
+  init();
+</script>
+</body>
+</html>
