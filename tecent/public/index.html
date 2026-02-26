@@ -626,11 +626,10 @@
     auth: { detectSessionInUrl: true }
   });
   const tcbAuth = tcbApp.auth();
-  const CLOUD_PATH    = "notes/notebook.json";
-  const CLOUD_FILE_ID = "cloud://kt-notebook-5gzea6as40f0fb41/" + CLOUD_PATH;
-
-  // --- 数据结构与存储 ---
-  const STORAGE_KEY = "study_notes_v1";
+  const CLOUD_PATH     = "notes/notebook.json";
+  const STORAGE_KEY    = "study_notes_v1";
+  // fileID 由 uploadFile 返回后持久化，不再手动拼接（手动拼接会因 bucket 名不对而失败）
+  const FILE_ID_KEY    = "cloud_file_id_v1";
 
   /**
    * @typedef {Object} Note
@@ -686,10 +685,15 @@
     try {
       const blob = new Blob([JSON.stringify(notes)], { type: "application/json" });
       const file = new File([blob], "notebook.json", { type: "application/json" });
-      await tcbApp.uploadFile({ cloudPath: CLOUD_PATH, filePath: file });
+      const uploadRes = await tcbApp.uploadFile({ cloudPath: CLOUD_PATH, filePath: file });
+      // 持久化 SDK 返回的真实 fileID，避免手动拼接 bucket 名出错
+      if (uploadRes?.fileID) {
+        localStorage.setItem(FILE_ID_KEY, uploadRes.fileID);
+        console.log("[Storage] 上传成功，fileID:", uploadRes.fileID);
+      }
       setSyncBadge("online");
     } catch (err) {
-      console.error("云存储写入失败：", err);
+      console.error("[Storage] 云存储写入失败：", err);
       setSyncBadge("error");
     }
   }
@@ -1189,10 +1193,21 @@
     // 从云存储读取笔记，与本地合并后再写回（避免直接覆盖导致多端丢数据）
     loadNotesFromLocal();
     const localBeforeMerge = notes.length ? notes.slice() : [];
+
+    // 优先使用上次上传时 SDK 返回并持久化的真实 fileID
+    const savedFileId = localStorage.getItem(FILE_ID_KEY);
+    if (!savedFileId) {
+      console.warn("[Storage] 本地尚无 fileID（首次使用或已清除），请先保存一条笔记以触发上传并获取 fileID。");
+      setSyncBadge("offline");
+      render();
+      return;
+    }
+    console.log("[Storage] 使用 fileID:", savedFileId);
+
     try {
       // fileList 必须是字符串数组（fileID），不能是对象——官方 JS SDK 文档规范
       const res = await tcbApp.getTempFileURL({
-        fileList: [CLOUD_FILE_ID]
+        fileList: [savedFileId]
       });
       const item = res.fileList[0];
       if (item.code === "SUCCESS" && item.tempFileURL) {
@@ -1213,7 +1228,8 @@
             try {
               const blob = new Blob([JSON.stringify(notes)], { type: "application/json" });
               const file = new File([blob], "notebook.json", { type: "application/json" });
-              await tcbApp.uploadFile({ cloudPath: CLOUD_PATH, filePath: file });
+              const uploadRes = await tcbApp.uploadFile({ cloudPath: CLOUD_PATH, filePath: file });
+              if (uploadRes?.fileID) localStorage.setItem(FILE_ID_KEY, uploadRes.fileID);
               console.log("[Storage] 回写完成");
             } catch (e) { console.warn("[Storage] 合并后回写云存储失败：", e); }
           }
