@@ -633,11 +633,12 @@
 
   /**
    * @typedef {Object} Note
-   * @property {number} id
-   * @property {string} date YYYY-MM-DD
-   * @property {string} text
+   * @property {number}   id
+   * @property {string}   date      YYYY-MM-DD（日期，用于分组/筛选）
+   * @property {string}   datetime  YYYY-MM-DD HH:mm:ss（完整创建时间，人类可读）
+   * @property {string}   text
    * @property {string[]} tags
-   * @property {number} createdAt
+   * @property {number}   createdAt 毫秒时间戳（用于排序和合并去重）
    */
 
   /** @type {Note[]} */
@@ -651,6 +652,17 @@
     const m = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
     return `${y}-${m}-${day}`;
+  }
+
+  /** 将任意 Date 对象格式化为 "YYYY-MM-DD HH:mm:ss" */
+  function formatDatetime(d) {
+    const y  = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, "0");
+    const da = String(d.getDate()).padStart(2, "0");
+    const h  = String(d.getHours()).padStart(2, "0");
+    const mi = String(d.getMinutes()).padStart(2, "0");
+    const s  = String(d.getSeconds()).padStart(2, "0");
+    return `${y}-${mo}-${da} ${h}:${mi}:${s}`;
   }
 
   function setSyncBadge(state) {
@@ -901,11 +913,12 @@
 
       const dateSpan = document.createElement("span");
       dateSpan.className = "note-date";
-      dateSpan.textContent = note.date;
+      // 优先使用完整 datetime 字段，旧数据回退到 date + createdAt 拼接
+      dateSpan.textContent = note.datetime
+        ? note.datetime
+        : note.date + " " + new Date(note.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
       const metaSpan = document.createElement("span");
-      const d = new Date(note.createdAt);
-      metaSpan.textContent = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
       header.appendChild(dateSpan);
       header.appendChild(metaSpan);
@@ -1045,12 +1058,14 @@
 
   document.getElementById("modalConfirmBtn").addEventListener("click", () => {
     const finalTags = Array.from(modal.selectedSet);
+    const now = new Date();
     const newNote = {
-      id: Date.now(),
+      id: now.getTime(),
       date: modal.pendingDate,
+      datetime: formatDatetime(now),
       text: modal.pendingText,
       tags: finalTags,
-      createdAt: Date.now(),
+      createdAt: now.getTime(),
     };
     notes.push(newNote);
     saveNotes();
