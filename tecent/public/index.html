@@ -1108,16 +1108,25 @@
     window.addEventListener("offline", () => setSyncBadge("offline"));
 
     // 用户名密码登录（已登录则复用，避免重复登录）
+    let authed = false;
     try {
-      const state = await tcbAuth.getLoginState();
+      let state = await tcbAuth.getLoginState();
       if (!state) {
         await tcbAuth.signInWithUsernameAndPassword("default", "Default1234");
+        state = await tcbAuth.getLoginState();
       }
+      authed = !!state;
     } catch (e) {
       console.warn("TCB 登录失败：", e);
     }
 
-    // 实时监听 TCB 文档（首次加载 + 多端实时推送）
+    if (!authed) {
+      loadNotesFromLocal();
+      render();
+      return;
+    }
+
+    // 实时监听 TCB 文档（登录成功后才启动）
     notesDoc.watch({
       onChange(snapshot) {
         if (snapshot.docs && snapshot.docs.length > 0) {
