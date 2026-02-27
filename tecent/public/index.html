@@ -315,23 +315,99 @@
       user-select: none;
     }
 
-    textarea {
-      width: 100%;
+    /* ── textarea + 镜像层容器 ── */
+    .textarea-wrap {
+      position: relative;
       flex: 1;
       min-height: 0;
-      resize: none;
       border-radius: 12px;
       border: 1px solid var(--border);
+      transition: border-color 0.15s, box-shadow 0.15s;
+      background: white;
+      overflow: hidden;
+    }
+
+    .textarea-wrap:focus-within {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.2);
+    }
+
+    .editor-wrap.focused .textarea-wrap {
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+    }
+
+    /* 镜像层：渲染 Markdown，绝对覆盖，不拦截交互 */
+    .editor-mirror {
+      position: absolute;
+      inset: 0;
       padding: 10px 12px;
       font-size: 16px;
       line-height: 1.6;
       font-family: inherit;
       box-sizing: border-box;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 1;
+      color: var(--text-main);
+    }
+
+    /* 格式标记（** _ `）：保留空间但视觉淡化 */
+    .md-mark {
+      color: #c4b5fd;
+      font-weight: normal !important;
+      font-style: normal !important;
+    }
+
+    .editor-mirror strong { font-weight: 600; color: var(--text-main); }
+    .editor-mirror em     { font-style: italic; }
+    .editor-mirror code   {
+      font-family: "Menlo", "Consolas", monospace;
+      font-size: 0.88em;
+      background: #f1f5f9;
+      border-radius: 3px;
+      padding: 0 3px;
+    }
+
+    textarea {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      resize: none;
+      border: none;
+      border-radius: 0;
+      padding: 10px 12px;
+      font-size: 16px;
+      line-height: 1.6;
+      font-family: inherit;
+      box-sizing: border-box;
+      background: transparent;
+      color: transparent;
+      caret-color: var(--text-main);
+      z-index: 2;
+    }
+
+    /* 占位文字需要显式颜色（否则继承 color:transparent） */
+    textarea::placeholder {
+      color: var(--text-sub);
+      opacity: 0.6;
+    }
+
+    /* 选区半透明，使下方镜像层仍可见 */
+    textarea::selection {
+      background: rgba(99, 102, 241, 0.25);
+      color: transparent;
     }
 
     textarea:focus,
     input[type="date"]:focus {
       outline: none;
+    }
+
+    input[type="date"]:focus {
       border-color: var(--primary);
       box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.2);
     }
@@ -339,6 +415,13 @@
     /* note 卡片正文中的富文本渲染 */
     .note-body strong { font-weight: 600; color: var(--text-main); }
     .note-body em     { font-style: italic; color: var(--text-sub); }
+    .note-body code   {
+      font-family: "Menlo", "Consolas", monospace;
+      font-size: 0.88em;
+      background: #f1f5f9;
+      border-radius: 3px;
+      padding: 0 3px;
+    }
 
     .card-footer {
       margin-top: 8px;
@@ -1000,7 +1083,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.7</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.8</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -1042,7 +1125,11 @@
           <div class="fmt-sep"></div>
           <button type="button" class="fmt-btn" data-fmt="code"   title="行内代码 (Ctrl+`)"><span style="font-family:monospace;font-size:12px;">`c`</span></button>
         </div>
-        <textarea id="noteInput" placeholder="今天学了什么？遇到什么问题？用自己的话总结一下吧～&#10;Tips: 输入 #标签 形式的关键词，会自动成为 tag，例如：#Unity #算法 #阅读"></textarea>
+        <div class="textarea-wrap">
+          <!-- 镜像层：实时渲染 Markdown，pointer-events:none -->
+          <div class="editor-mirror" id="editorMirror" aria-hidden="true"></div>
+          <textarea id="noteInput" placeholder="今天学了什么？遇到什么问题？用自己的话总结一下吧～&#10;Tips: 输入 #标签 形式的关键词，会自动成为 tag，例如：#Unity #算法 #阅读"></textarea>
+        </div>
       </div>
       <div class="card-footer">
         <div class="hint">
@@ -1229,6 +1316,31 @@
       .replace(/`([^`]+)`/g,     "<code>$1</code>")
       .replace(/_([^_\n]+)_/g,   "<em>$1</em>")
       .replace(/\n/g, "<br>");
+  }
+
+  /**
+   * 将 raw 文本渲染到编辑器镜像层（textarea 背后的 WYSIWYG 层）。
+   * 格式标记（** _ `）保留原字符但变淡，便于光标对齐。
+   */
+  function renderMirrorContent(raw) {
+    const mirror = document.getElementById("editorMirror");
+    if (!mirror) return;
+    if (!raw) { mirror.innerHTML = ""; return; }
+    const html = raw
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      // **bold** → 淡化标记 + <strong>
+      .replace(/\*\*(.+?)\*\*/g,
+        '<span class="md-mark">**</span><strong>$1</strong><span class="md-mark">**</span>')
+      // `code`
+      .replace(/`([^`\n]+)`/g,
+        '<span class="md-mark">`</span><code>$1</code><span class="md-mark">`</span>')
+      // _italic_
+      .replace(/_([^_\n]+)_/g,
+        '<span class="md-mark">_</span><em>$1</em><span class="md-mark">_</span>')
+      .replace(/\n/g, "<br>");
+    mirror.innerHTML = html;
+    // 同步滚动位置
+    mirror.scrollTop = noteInput.scrollTop;
   }
 
   /**
@@ -1420,6 +1532,7 @@
     editingNoteId = note.id;
     titleInput.value = note.title || "";
     noteInput.value  = note.text;
+    renderMirrorContent(note.text);
     dateInput.value  = note.date;
     charCount.textContent = `${note.text.length} 字`;
     saveBtn.textContent = "更新日志";
@@ -1434,6 +1547,7 @@
     editingNoteId = null;
     titleInput.value = "";
     noteInput.value  = "";
+    renderMirrorContent("");
     dateInput.value  = getTodayStr();
     charCount.textContent = "0 字";
     saveBtn.textContent = "保存日志";
@@ -1919,6 +2033,7 @@
       saveNotes();
       titleInput.value = "";
       noteInput.value  = "";
+      renderMirrorContent("");
       charCount.textContent = "0 字";
       closeTagModal();
       render();
@@ -1947,6 +2062,13 @@
   noteInput.addEventListener("input", () => {
     const len = noteInput.value.length;
     charCount.textContent = `${len} 字`;
+    renderMirrorContent(noteInput.value);
+  });
+
+  // 滚动时同步镜像层
+  noteInput.addEventListener("scroll", () => {
+    const mirror = document.getElementById("editorMirror");
+    if (mirror) mirror.scrollTop = noteInput.scrollTop;
   });
 
   // --- Tab 缩进 + 自动编号 / Shift+Tab 回退层级 / Backspace 回退缩进 ---
@@ -2293,6 +2415,19 @@
   // ── 更新日志数据 ──────────────────────────────────────────────────
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
+    {
+      version: "v0.2.8",
+      date: "2026-02-27",
+      type: "feat",
+      desc: "编辑器 WYSIWYG 渲染（所见即所得）",
+      items: [
+        "编辑区实时渲染加粗、斜体、行内代码，不再显示 **标记** 本身",
+        "格式标记（** _ `）以淡紫色小字保留在原位，保证光标位置精确对齐",
+        "选区以半透明蓝紫高亮显示，可透视下方渲染效果",
+        "滚动时镜像层与文字光标同步，长文不错位",
+        "笔记卡片中同步渲染行内代码样式"
+      ]
+    },
     {
       version: "v0.2.7",
       date: "2026-02-27",
