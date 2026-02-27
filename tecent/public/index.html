@@ -101,17 +101,33 @@
       align-items: center;
       gap: 4px;
       white-space: nowrap;
+      transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
     }
 
     button.primary {
       background: var(--primary);
       color: white;
     }
+    button.primary:hover {
+      background: #4338ca;
+      box-shadow: 0 2px 8px rgba(79, 70, 229, 0.35);
+    }
+    button.primary:active {
+      opacity: 0.85;
+    }
 
     button.outline {
       background: transparent;
       border: 1px solid var(--border);
       color: var(--text-sub);
+    }
+    button.outline:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+      background: var(--primary-soft);
+    }
+    button.outline:active {
+      opacity: 0.8;
     }
 
     button.small {
@@ -803,7 +819,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.0</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.1</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -1824,6 +1840,17 @@
   // ── 更新日志数据 ──────────────────────────────────────────────────
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
+    {
+      version: "v0.2.1",
+      date: "2026-02-27",
+      type: "feat",
+      desc: "全局按钮统一 hover / active 交互效果",
+      items: [
+        "所有按钮新增 hover 高亮：主色按钮悬停变深并带阴影，边框按钮悬停变主色调",
+        "新增 active 按下反馈（轻微透明度变化），提升点击感",
+        "过渡动画统一为 0.15s，与「更新记录」按钮风格一致"
+      ]
+    },
     {
       version: "v0.2.0",
       date: "2026-02-27",

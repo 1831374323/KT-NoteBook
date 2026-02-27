@@ -1,5 +1,5 @@
 ---
-description: 每次提交 tecent/public/index.html 时自动递增版本号并维护更新记录
+description: 每次提交 tecent/public/index.html 时自动递增版本号、维护更新记录，并遵守 UI 交互规范
 globs: tecent/public/index.html
 alwaysApply: true
 ---
@@ -9,17 +9,26 @@ alwaysApply: true
 每次对 `tecent/public/index.html` 进行修改并 push 时：
 
 1. 找到文件中的版本号：`<span ...>v{major}.{minor}.{patch}</span>`
-2. 将 `patch` 加 1（最后一位 +1）
+2. 将 `patch` 加 1（最后一位 +1），**patch 没有上限，不进位**
 3. commit message 中注明新版本号，格式：`v{version} - {改动描述}`
+
+## 递增规则（重要）
+
+- **patch 无上限**：`patch` 只做 +1，不存在"满 10 进位到 minor"的逻辑
+- 版本三段各自独立，只有用户明确要求时才修改 `major` 或 `minor`
 
 ## 示例
 
-- 当前 `v1.0.3` → 本次改动后改为 `v1.0.4`
-- 当前 `v0.1.4` → 本次改动后改为 `v0.1.5`
+| 当前版本 | 本次改动后 |
+|---|---|
+| `v1.0.3` | `v1.0.4` |
+| `v0.1.9` | `v0.1.10` |
+| `v1.0.9` | `v1.0.10` |
+| `v1.0.19` | `v1.0.20` |
 
 ## 例外
 
-仅当用户明确指定版本号时（如"版本号1.2.0"），使用用户指定的值，不自动递增。
+仅当用户明确指定版本号时（如"版本号改成 1.2.0"），使用用户指定的值，不自动递增。
 
 ---
 
@@ -63,3 +72,43 @@ const CHANGELOG = [
 - items 描述要**面向用户**，避免技术术语，聚焦"做了什么、解决了什么问题"
 - 一个版本可以有多条 items
 - 日期使用本次实际修改的日期
+
+---
+
+# 按钮 UI 规范
+
+所有新增或修改的按钮**必须**遵守以下统一风格：
+
+## 基础要求
+
+- 所有按钮必须有 `transition`（推荐 `0.15s`），保证状态切换流畅
+- 所有按钮必须定义 `:hover` 和 `:active` 样式
+
+## 按钮类型规范
+
+| 类型 | 基础样式 | `:hover` | `:active` |
+|---|---|---|---|
+| `.primary` | `background: var(--primary); color: white` | 背景加深 `#4338ca` + `box-shadow` | `opacity: 0.85` |
+| `.outline` | `border: 1px solid var(--border); color: var(--text-sub)` | `border-color/color` 变主色 + `background: var(--primary-soft)` | `opacity: 0.8` |
+| 自定义按钮 | 参考以上风格 | 必须有颜色/边框变化 | 必须有透明度或缩放反馈 |
+
+## 示例（标准写法）
+
+```css
+button.primary {
+  background: var(--primary);
+  color: white;
+  transition: background 0.15s, box-shadow 0.15s, opacity 0.15s;
+}
+button.primary:hover  { background: #4338ca; box-shadow: 0 2px 8px rgba(79,70,229,.35); }
+button.primary:active { opacity: 0.85; }
+
+button.outline {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-sub);
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+button.outline:hover  { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
+button.outline:active { opacity: 0.8; }
+```
