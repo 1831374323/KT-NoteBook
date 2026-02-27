@@ -913,7 +913,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.5</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.6</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -1507,6 +1507,7 @@
       "确定要删除这条笔记吗？\n此操作不可恢复。",
       () => {
         notes = notes.filter(n => n.id !== id);
+        if (id === editingNoteId) exitEditMode();
         saveNotes();
         render();
       },
@@ -1722,7 +1723,7 @@
     const now = new Date();
 
     if (editingNoteId != null) {
-      // 更新已有笔记：保存后保留编辑器内容，仅退出编辑状态
+      // 更新已有笔记
       const idx = notes.findIndex(n => n.id === editingNoteId);
       if (idx !== -1) {
         notes[idx] = {
@@ -1736,11 +1737,7 @@
       }
       saveNotes();
       closeTagModal();
-      // 仅重置编辑状态，不清空编辑器内容
-      editingNoteId = null;
-      saveBtn.textContent = "保存日志";
-      cancelEditBtn.style.display = "none";
-      render();
+      exitEditMode();
     } else {
       // 新建笔记
       const newNote = {
@@ -2123,6 +2120,16 @@
   // ── 更新日志数据 ──────────────────────────────────────────────────
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
+    {
+      version: "v0.2.6",
+      date: "2026-02-27",
+      type: "fix",
+      desc: "删除正在编辑的笔记时清空左侧；更新后清空编辑区",
+      items: [
+        "删除右侧笔记时，若该笔记正在左侧编辑区中显示，自动清空左侧编辑区",
+        "更新笔记后恢复清空编辑区的行为（撤销 v0.2.3 的保留内容改动）"
+      ]
+    },
     {
       version: "v0.2.5",
       date: "2026-02-27",
