@@ -320,6 +320,19 @@
       display: flex;
       flex-direction: column;
       gap: 6px;
+      cursor: pointer;
+      transition: border-color .15s, box-shadow .15s;
+    }
+
+    .note-item:hover {
+      border-color: #c7d2fe;
+      box-shadow: 0 2px 8px rgba(79,70,229,.07);
+    }
+
+    .note-item.editing {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(79,70,229,.12);
+      background: #f5f3ff;
     }
 
     .note-title {
@@ -586,7 +599,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.0</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.1.2</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -615,6 +628,7 @@
           <code>包含已有标签文本</code>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
+          <button id="cancelEditBtn" class="outline small" style="display:none;">✕ 取消编辑</button>
           <button id="saveBtn" class="primary">保存日志</button>
         </div>
       </div>
@@ -859,8 +873,39 @@
   // --- DOM 引用 ---
   const dateInput = document.getElementById("dateInput");
   const noteInput = document.getElementById("noteInput");
-  const titleInput = document.getElementById("titleInput");
-  const saveBtn    = document.getElementById("saveBtn");
+  const titleInput    = document.getElementById("titleInput");
+  const saveBtn       = document.getElementById("saveBtn");
+  const cancelEditBtn = document.getElementById("cancelEditBtn");
+
+  // --- 编辑状态 ---
+  let editingNoteId = null;
+
+  function enterEditMode(note) {
+    editingNoteId = note.id;
+    titleInput.value = note.title || "";
+    noteInput.value  = note.text;
+    dateInput.value  = note.date;
+    charCount.textContent = `${note.text.length} 字`;
+    saveBtn.textContent = "更新日志";
+    cancelEditBtn.style.display = "";
+    // 滚到编辑区
+    document.getElementById("paneLeft").scrollIntoView({ behavior: "smooth", block: "start" });
+    titleInput.focus();
+    renderNotes(); // 刷新高亮
+  }
+
+  function exitEditMode() {
+    editingNoteId = null;
+    titleInput.value = "";
+    noteInput.value  = "";
+    dateInput.value  = getTodayStr();
+    charCount.textContent = "0 字";
+    saveBtn.textContent = "保存日志";
+    cancelEditBtn.style.display = "none";
+    renderNotes();
+  }
+
+  cancelEditBtn.addEventListener("click", exitEditMode);
   const todayBtn = document.getElementById("todayBtn");
   const charCount = document.getElementById("charCount");
   const tagListEl = document.getElementById("tagList");
@@ -1019,9 +1064,16 @@
       const item = document.createElement("div");
       item.className = "note-item";
 
+      // 左键：加载到编辑器
+      item.addEventListener("click", () => enterEditMode(note));
+
+      // 编辑中高亮
+      if (note.id === editingNoteId) item.classList.add("editing");
+
       // 右键菜单
       item.addEventListener("contextmenu", (e) => {
         e.preventDefault();
+        e.stopPropagation();
         showCtxMenu(e.clientX, e.clientY, note.id);
       });
 
@@ -1119,12 +1171,12 @@
     }
   }
 
-  function openTagModal(text, date, title) {
+  function openTagModal(text, date, title, preselectedTags) {
     modal.pendingText  = text;
     modal.pendingDate  = date;
     modal.pendingTitle = title || "";
     modal.customTags  = [];
-    modal.selectedSet = new Set();
+    modal.selectedSet = new Set(preselectedTags || []);
 
     // 自动提取并预选
     const existingTags = getAllExistingTags();
@@ -1188,22 +1240,43 @@
   document.getElementById("modalConfirmBtn").addEventListener("click", () => {
     const finalTags = Array.from(modal.selectedSet);
     const now = new Date();
-    const newNote = {
-      id: now.getTime(),
-      date: modal.pendingDate,
-      title: modal.pendingTitle,
-      datetime: formatDatetime(now),
-      text: modal.pendingText,
-      tags: finalTags,
-      createdAt: now.getTime(),
-    };
-    notes.push(newNote);
-    saveNotes();
-    titleInput.value = "";
-    noteInput.value  = "";
-    charCount.textContent = "0 字";
-    closeTagModal();
-    render();
+
+    if (editingNoteId != null) {
+      // 更新已有笔记
+      const idx = notes.findIndex(n => n.id === editingNoteId);
+      if (idx !== -1) {
+        notes[idx] = {
+          ...notes[idx],
+          title:    modal.pendingTitle,
+          date:     modal.pendingDate,
+          datetime: formatDatetime(now),
+          text:     modal.pendingText,
+          tags:     finalTags,
+        };
+      }
+      saveNotes();
+      closeTagModal();
+      exitEditMode();
+      render();
+    } else {
+      // 新建笔记
+      const newNote = {
+        id: now.getTime(),
+        date: modal.pendingDate,
+        title: modal.pendingTitle,
+        datetime: formatDatetime(now),
+        text: modal.pendingText,
+        tags: finalTags,
+        createdAt: now.getTime(),
+      };
+      notes.push(newNote);
+      saveNotes();
+      titleInput.value = "";
+      noteInput.value  = "";
+      charCount.textContent = "0 字";
+      closeTagModal();
+      render();
+    }
   });
 
   // --- 事件绑定 ---
@@ -1217,7 +1290,12 @@
       return;
     }
 
-    openTagModal(text, date, title);
+    // 编辑时预选已有标签
+    const preselected = editingNoteId != null
+      ? (notes.find(n => n.id === editingNoteId)?.tags || [])
+      : [];
+
+    openTagModal(text, date, title, preselected);
   });
 
   noteInput.addEventListener("input", () => {
