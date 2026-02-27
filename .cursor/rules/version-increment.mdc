@@ -86,15 +86,20 @@ const CHANGELOG = [
 
 ## 按钮类型规范
 
-| 类型 | 基础样式 | `:hover` | `:active` |
+**⚠️ 默认原则：hover 时只改变边框色和文字色，不改变背景色。**  
+仅 `.primary`（填充按钮）例外，因本身有背景色需要加深反馈。
+
+| 类型 | 基础样式 | `:hover`（**无背景变化**） | `:active` |
 |---|---|---|---|
-| `.primary` | `background: var(--primary); color: white` | 背景加深 `#4338ca` + `box-shadow` | `opacity: 0.85` |
-| `.outline` | `border: 1px solid var(--border); color: var(--text-sub)` | `border-color/color` 变主色 + `background: var(--primary-soft)` | `opacity: 0.8` |
-| 自定义按钮 | 参考以上风格 | 必须有颜色/边框变化 | 必须有透明度或缩放反馈 |
+| `.primary` | `background: var(--primary); color: white` | 背景加深 `#4338ca` + `box-shadow`（唯一允许改背景的类型） | `opacity: 0.85` |
+| `.outline` | `border: 1px solid var(--border); color: var(--text-sub)` | `border-color/color` 变主色，**不改背景** | `opacity: 0.8` |
+| `.tag-chip`（tag 也视为按钮） | `border: 1px solid var(--border); color: var(--text-sub)` | `border-color/color` 变主色，**不改背景** | `opacity: 0.75` |
+| 自定义按钮 | 参考 `.outline` 风格 | 只改边框/文字色 | 透明度反馈 |
 
 ## 示例（标准写法）
 
 ```css
+/* 填充按钮：唯一允许 hover 改背景 */
 button.primary {
   background: var(--primary);
   color: white;
@@ -103,12 +108,20 @@ button.primary {
 button.primary:hover  { background: #4338ca; box-shadow: 0 2px 8px rgba(79,70,229,.35); }
 button.primary:active { opacity: 0.85; }
 
+/* 边框按钮：hover 只改边框+文字色，不改背景 */
 button.outline {
   background: transparent;
   border: 1px solid var(--border);
   color: var(--text-sub);
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  transition: border-color 0.15s, color 0.15s, opacity 0.15s;
 }
-button.outline:hover  { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
+button.outline:hover  { border-color: var(--primary); color: var(--primary); }
 button.outline:active { opacity: 0.8; }
+
+/* tag-chip：与 outline 一致 */
+.tag-chip {
+  transition: border-color 0.15s, color 0.15s, opacity 0.15s;
+}
+.tag-chip:hover  { border-color: var(--primary); color: var(--primary); }
+.tag-chip:active { opacity: 0.75; }
 ```

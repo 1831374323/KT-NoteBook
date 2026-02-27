@@ -124,7 +124,6 @@
     button.outline:hover {
       border-color: var(--primary);
       color: var(--primary);
-      background: var(--primary-soft);
     }
     button.outline:active {
       opacity: 0.8;
@@ -317,6 +316,16 @@
       display: inline-flex;
       align-items: center;
       gap: 4px;
+      transition: border-color 0.15s, color 0.15s, opacity 0.15s;
+    }
+
+    .tag-chip:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .tag-chip:active {
+      opacity: 0.75;
     }
 
     .tag-chip.active {
@@ -324,6 +333,11 @@
       border-color: var(--primary);
       color: var(--primary);
       font-weight: 500;
+    }
+
+    .tag-chip.active:hover {
+      border-color: #4338ca;
+      color: #4338ca;
     }
 
     .tag-chip span.count {
@@ -819,7 +833,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.1</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.2</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -897,6 +911,11 @@
 <!-- 标签选择弹窗 -->
 <div id="ctxMenu" class="ctx-menu" style="display:none;">
   <div class="ctx-menu-item danger" id="ctxDelete">🗑 删除笔记</div>
+</div>
+
+<div id="tagCtxMenu" class="ctx-menu" style="display:none;">
+  <div class="ctx-menu-item" id="tagCtxFilter">🏷 筛选此标签</div>
+  <div class="ctx-menu-item danger" id="tagCtxDelete">🗑 删除标签（所有笔记）</div>
 </div>
 
 <div id="tagModal" class="modal-overlay" style="display:none;">
@@ -1145,23 +1164,18 @@
 
   // 给 tag 绑定事件：左键筛选，右键删除
   function attachTagEvents(tagElement, tag) {
-    // 左键点击：筛选
+    // 左键点击：筛选切换
     tagElement.addEventListener("click", (e) => {
       if (e.button !== 0) return;
-      if (activeTag === tag) {
-        activeTag = null;
-      } else {
-        activeTag = tag;
-      }
+      activeTag = activeTag === tag ? null : tag;
       render();
     });
 
-    // 右键：删除 tag（所有笔记）
+    // 右键：弹出菜单（筛选 / 删除）
     tagElement.addEventListener("contextmenu", (e) => {
       e.preventDefault();
-      const ok = confirm(`从所有笔记中删除标签「${tag}」？`);
-      if (!ok) return;
-      deleteTagEverywhere(tag);
+      e.stopPropagation();
+      showTagCtxMenu(e.clientX, e.clientY, tag);
     });
   }
 
@@ -1221,15 +1235,15 @@
     return firstLine.length <= 5 ? firstLine : firstLine.slice(0, 5) + "…";
   }
 
-  // --- 右键菜单 ---
+  // --- 笔记右键菜单 ---
   const ctxMenu   = document.getElementById("ctxMenu");
   const ctxDelete = document.getElementById("ctxDelete");
   let ctxNoteId   = null;
 
   function showCtxMenu(x, y, noteId) {
+    hideTagCtxMenu();
     ctxNoteId = noteId;
     ctxMenu.style.display = "block";
-    // 防止超出视口
     const menuW = 140, menuH = 50;
     ctxMenu.style.left = (x + menuW > window.innerWidth  ? x - menuW : x) + "px";
     ctxMenu.style.top  = (y + menuH > window.innerHeight ? y - menuH : y) + "px";
@@ -1240,8 +1254,45 @@
     ctxNoteId = null;
   }
 
-  document.addEventListener("click", hideCtxMenu);
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideCtxMenu(); });
+  // --- Tag 右键菜单 ---
+  const tagCtxMenu    = document.getElementById("tagCtxMenu");
+  const tagCtxFilter  = document.getElementById("tagCtxFilter");
+  const tagCtxDeleteEl= document.getElementById("tagCtxDelete");
+  let ctxTag = null;
+
+  function showTagCtxMenu(x, y, tag) {
+    hideCtxMenu();
+    ctxTag = tag;
+    // 动态更新筛选项文字，反映当前状态
+    tagCtxFilter.textContent = activeTag === tag ? "🏷 取消筛选" : "🏷 筛选此标签";
+    tagCtxMenu.style.display = "block";
+    const menuW = 190, menuH = 80;
+    tagCtxMenu.style.left = (x + menuW > window.innerWidth  ? x - menuW : x) + "px";
+    tagCtxMenu.style.top  = (y + menuH > window.innerHeight ? y - menuH : y) + "px";
+  }
+
+  function hideTagCtxMenu() {
+    tagCtxMenu.style.display = "none";
+    ctxTag = null;
+  }
+
+  tagCtxFilter.addEventListener("click", () => {
+    if (!ctxTag) return;
+    activeTag = activeTag === ctxTag ? null : ctxTag;
+    render();
+    hideTagCtxMenu();
+  });
+
+  tagCtxDeleteEl.addEventListener("click", () => {
+    if (!ctxTag) return;
+    deleteTagEverywhere(ctxTag);
+    hideTagCtxMenu();
+  });
+
+  document.addEventListener("click", () => { hideCtxMenu(); hideTagCtxMenu(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { hideCtxMenu(); hideTagCtxMenu(); }
+  });
 
   ctxDelete.addEventListener("click", () => {
     if (ctxNoteId == null) return;
@@ -1840,6 +1891,18 @@
   // ── 更新日志数据 ──────────────────────────────────────────────────
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
+    {
+      version: "v0.2.2",
+      date: "2026-02-27",
+      type: "feat",
+      desc: "按钮风格统一 + tag 右键菜单",
+      items: [
+        "统一全局按钮交互规范：hover 时只改边框和文字颜色，不改变背景色（与「更新记录」按钮保持一致）",
+        "标签（tag chip）同步加入 hover/active 动效，风格与按钮统一",
+        "tag 右键点击从 confirm 弹窗改为浮动菜单，菜单包含「筛选此标签」和「删除标签」两项，与笔记右键菜单体验一致",
+        "筛选状态下右键 tag，菜单第一项自动显示「取消筛选」"
+      ]
+    },
     {
       version: "v0.2.1",
       date: "2026-02-27",
