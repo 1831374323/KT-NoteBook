@@ -599,7 +599,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.1.2</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v1.0.3</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -624,7 +624,6 @@
         <div class="hint">
           自动提取标签规则：
           <code>#标签</code> +
-          <code>英文关键词</code>（按出现频率排序） +
           <code>包含已有标签文本</code>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
@@ -837,28 +836,7 @@
       tagsSet.add(match[1]);
     }
 
-    // 2) 英文关键词（按频率统计）
-    const lower = text.toLowerCase();
-    const words = lower.match(/[a-z]{3,}/g) || [];
-    const stopwords = new Set([
-      "the", "and", "for", "with", "that", "this",
-      "you", "are", "not", "but", "all", "any",
-      "can", "your", "from", "have", "has", "will",
-      "just", "about", "into", "more", "when", "then",
-    ]);
-    const freq = new Map();
-    for (const w of words) {
-      if (stopwords.has(w)) continue;
-      freq.set(w, (freq.get(w) || 0) + 1);
-    }
-
-    const sorted = [...freq.entries()].sort((a, b) => b[1] - a[1]);
-    for (let i = 0; i < sorted.length && i < 5; i++) {
-      const word = sorted[i][0];
-      tagsSet.add(word);
-    }
-
-    // 3) 文本中出现的已有标签
+    // 2) 文本中出现的已有标签
     const lowerText = text.toLowerCase();
     for (const tag of existingTags) {
       if (!tag) continue;
@@ -1301,6 +1279,75 @@
   noteInput.addEventListener("input", () => {
     const len = noteInput.value.length;
     charCount.textContent = `${len} 字`;
+  });
+
+  // --- Tab 缩进 + 自动编号 / Backspace 回退缩进 ---
+  const INDENT = "  "; // 2空格为一级缩进
+
+  noteInput.addEventListener("keydown", (e) => {
+    const ta    = noteInput;
+    const start = ta.selectionStart;
+    const end   = ta.selectionEnd;
+    const val   = ta.value;
+
+    if (e.key === "Tab") {
+      e.preventDefault();
+
+      // 找到当前行起始位置
+      const lineStart = val.lastIndexOf("\n", start - 1) + 1;
+      const lineText  = val.slice(lineStart, start);
+
+      // 计算当前缩进级别
+      const indentMatch = lineText.match(/^(\s*)/);
+      const currentIndent = indentMatch ? indentMatch[1] : "";
+      const newIndent = currentIndent + INDENT;
+      const indentLevel = newIndent.length / INDENT.length;
+
+      // 生成编号前缀（第1级：1. 2. 3.，第2级：a. b.，第3级：- ）
+      function getPrefix(level, lineStart, val) {
+        if (level <= 0) return "";
+        // 统计同级已有编号数量
+        const lines = val.slice(0, lineStart).split("\n");
+        const indent = INDENT.repeat(level);
+        let count = 0;
+        for (let i = lines.length - 1; i >= 0; i--) {
+          const l = lines[i];
+          if (!l.startsWith(indent)) break;
+          if (l.trim() !== "") count++;
+        }
+        if (level === 1) return `${count + 1}. `;
+        if (level === 2) return `${String.fromCharCode(96 + count + 1)}. `;
+        return "- ";
+      }
+
+      const prefix = getPrefix(indentLevel, lineStart, val);
+      const insertion = newIndent + prefix;
+
+      // 如果光标在行首或行全是空白，给当前行加缩进+编号
+      if (start === end) {
+        ta.value = val.slice(0, lineStart) + insertion + val.slice(lineStart).replace(/^\s*/, "");
+        const newPos = lineStart + insertion.length;
+        ta.setSelectionRange(newPos, newPos);
+      } else {
+        // 选中多行：统一加缩进
+        ta.value = val.slice(0, start) + INDENT + val.slice(start);
+        ta.setSelectionRange(start + INDENT.length, end + INDENT.length);
+      }
+      charCount.textContent = `${ta.value.length} 字`;
+    }
+
+    if (e.key === "Backspace" && start === end) {
+      // 检查光标前是否是纯缩进（空格）
+      const lineStart = val.lastIndexOf("\n", start - 1) + 1;
+      const beforeCursor = val.slice(lineStart, start);
+      if (/^\s+$/.test(beforeCursor) && beforeCursor.length >= INDENT.length) {
+        e.preventDefault();
+        const removeLen = INDENT.length;
+        ta.value = val.slice(0, start - removeLen) + val.slice(start);
+        ta.setSelectionRange(start - removeLen, start - removeLen);
+        charCount.textContent = `${ta.value.length} 字`;
+      }
+    }
   });
 
   todayBtn.addEventListener("click", () => {
