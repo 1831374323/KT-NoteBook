@@ -599,7 +599,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.1.5</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.1.6</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -1283,75 +1283,83 @@
 
   // --- Tab 缩进 + 自动编号 / Shift+Tab 回退层级 / Backspace 回退缩进 ---
   const INDENT = "  "; // 2空格为一级缩进
-  const PREFIX_RE = /^(\d+\. |[a-z]\. |- )/; // 匹配各级编号前缀
+  const PREFIX_RE = /^(\d+\. |[a-z]\. |- )/;
 
-  // 统计某缩进级别下当前行之前已有多少同级条目（精确匹配，不计子级）
-  function countSiblings(level, lineStart, val) {
-    if (level <= 0) return 0;
-    const exactLen = INDENT.length * level;
-    const lines = val.slice(0, lineStart).split("\n");
-    let count = 0;
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const l = lines[i];
-      const indentLen = (l.match(/^(\s*)/) || ["",""])[1].length;
-      if (indentLen < exactLen) break;       // 遇到父级或更高层，停止
-      if (indentLen === exactLen && l.trim()) count++; // 只计恰好同级非空行
-    }
-    return count;
-  }
-
-  // 根据层级和同级数量生成前缀
-  function makePrefix(level, lineStart, val) {
-    if (level <= 0) return "";
-    const n = countSiblings(level, lineStart, val) + 1;
-    if (level === 1) return `${n}. `;
-    if (level === 2) return `${String.fromCharCode(96 + n)}. `;
-    return "- ";
-  }
-
-  // 从已有编号前缀推算下一个前缀（用于 Enter 继续编号）
-  function nextPrefix(prefix) {
-    const numM = prefix.match(/^(\d+)\. /);
-    if (numM) return `${parseInt(numM[1]) + 1}. `;
-    const letM = prefix.match(/^([a-z])\. /);
-    if (letM) return `${String.fromCharCode(letM[1].charCodeAt(0) + 1)}. `;
-    return "- ";
-  }
-
-  // 获取一行的纯文字内容（去掉缩进和编号前缀）
-  function lineContent(line) {
-    return line.replace(/^\s*/, "").replace(PREFIX_RE, "");
-  }
-
-  // 获取一行当前的缩进级别
   function lineLevel(line) {
     const m = line.match(/^(\s*)/);
     return m ? Math.floor(m[1].length / INDENT.length) : 0;
   }
 
-  // 对当前行应用层级变化（delta = +1 或 -1），重新生成缩进+编号
+  function lineContent(line) {
+    return line.replace(/^\s*/, "").replace(PREFIX_RE, "");
+  }
+
+  // 全局重新编号：按顺序扫描所有行，为每个编号行赋正确序号
+  function renumberAll(text) {
+    const lines = text.split("\n");
+    const counters = {}; // level -> 当前计数
+    return lines.map(line => {
+      const level   = lineLevel(line);
+      const trimmed = line.trimStart();
+      // 遇到比当前 level 深的 counter 要清掉（进入新父条目时子级重新计数）
+      for (const k in counters) {
+        if (parseInt(k) > level) delete counters[k];
+      }
+      if (!PREFIX_RE.test(trimmed)) return line; // 非编号行保持不变
+      const content = lineContent(line);
+      counters[level] = (counters[level] || 0) + 1;
+      const n = counters[level];
+      let pre;
+      if (level === 1) pre = `${n}. `;
+      else if (level === 2) pre = `${String.fromCharCode(96 + n)}. `;
+      else pre = "- ";
+      return INDENT.repeat(level) + pre + content;
+    }).join("\n");
+  }
+
+  // 应用新文本 + 全局重新编号，光标定位到指定行行首的正文起始处
+  function applyRenumbered(ta, newVal, cursorPos) {
+    // 计算光标所在行索引（在 newVal 中）
+    const lineIdx = (newVal.slice(0, cursorPos).match(/\n/g) || []).length;
+    const renumbered = renumberAll(newVal);
+    const newLines   = renumbered.split("\n");
+    // 重新计算光标：定位到该行正文起始（indent + prefix 之后）
+    let pos = 0;
+    for (let i = 0; i < lineIdx && i < newLines.length; i++) {
+      pos += newLines[i].length + 1; // +1 换行符
+    }
+    const tLine   = newLines[Math.min(lineIdx, newLines.length - 1)] || "";
+    const tTrimmed = tLine.trimStart();
+    const prefixLen = tLine.length - tTrimmed.length + (tTrimmed.match(PREFIX_RE) || [""])[0].length;
+    pos += prefixLen;
+    ta.value = renumbered;
+    ta.setSelectionRange(pos, pos);
+    charCount.textContent = `${renumbered.length} 字`;
+  }
+
+  // 临时前缀（用于在 renumberAll 修正前占位）
+  function provPrefix(level) {
+    if (level === 1) return "1. ";
+    if (level === 2) return "a. ";
+    if (level >= 3) return "- ";
+    return "";
+  }
+
+  // 修改当前行的层级（Tab / Shift+Tab）
   function shiftLineLevel(ta, delta) {
     const val   = ta.value;
     const start = ta.selectionStart;
-
-    const lineStart = val.lastIndexOf("\n", start - 1) + 1;
-    const lineEnd   = val.indexOf("\n", start);
-    const lineStop  = lineEnd === -1 ? val.length : lineEnd;
-    const line      = val.slice(lineStart, lineStop);
-
-    const curLevel  = lineLevel(line);
-    const newLevel  = Math.max(0, curLevel + delta);
-    const content   = lineContent(line);
-
-    const newIndent  = INDENT.repeat(newLevel);
-    const newPrefix  = makePrefix(newLevel, lineStart, val);
-    const newLine    = newIndent + newPrefix + content;
-
-    const newCursorPos = lineStart + newLine.length - content.length;
-
-    ta.value = val.slice(0, lineStart) + newLine + val.slice(lineStop);
-    ta.setSelectionRange(newCursorPos, newCursorPos);
-    charCount.textContent = `${ta.value.length} 字`;
+    const lineStart  = val.lastIndexOf("\n", start - 1) + 1;
+    const lineEndIdx = val.indexOf("\n", start);
+    const lineStop   = lineEndIdx === -1 ? val.length : lineEndIdx;
+    const line       = val.slice(lineStart, lineStop);
+    const newLevel   = Math.max(0, lineLevel(line) + delta);
+    const content    = lineContent(line);
+    const newLine    = INDENT.repeat(newLevel) + provPrefix(newLevel) + content;
+    const newVal     = val.slice(0, lineStart) + newLine + val.slice(lineStop);
+    // 光标定位到新行正文起始（renumberAll 会修正前缀，applyRenumbered 重新计算）
+    const cursorPos  = lineStart + newLine.length - content.length;
+    applyRenumbered(ta, newVal, cursorPos);
   }
 
   noteInput.addEventListener("keydown", (e) => {
@@ -1360,20 +1368,20 @@
     const end   = ta.selectionEnd;
     const val   = ta.value;
 
-    // Shift+Tab：当前行升一级
+    // Shift+Tab：升一级
     if (e.key === "Tab" && e.shiftKey) {
       e.preventDefault();
       shiftLineLevel(ta, -1);
       return;
     }
 
-    // Tab：当前行降一级（有编号则替换，无编号则新增）
+    // Tab：降一级
     if (e.key === "Tab" && !e.shiftKey) {
       e.preventDefault();
       if (start === end) {
         shiftLineLevel(ta, +1);
       } else {
-        // 选中多行时：仅加缩进，不改编号
+        // 多选时只加缩进，不改编号
         ta.value = val.slice(0, start) + INDENT + val.slice(start);
         ta.setSelectionRange(start + INDENT.length, end + INDENT.length);
         charCount.textContent = `${ta.value.length} 字`;
@@ -1381,52 +1389,40 @@
       return;
     }
 
-    // Enter：有编号时继续同级下一个编号
+    // Enter：有编号时继续同级编号
     if (e.key === "Enter") {
-      const lineStart = val.lastIndexOf("\n", start - 1) + 1;
+      const lineStart  = val.lastIndexOf("\n", start - 1) + 1;
       const lineEndIdx = val.indexOf("\n", start);
-      const lineStop  = lineEndIdx === -1 ? val.length : lineEndIdx;
-      const line      = val.slice(lineStart, lineStop);
-      const level     = lineLevel(line);
-
-      if (level > 0) {
-        const trimmed     = line.trimStart();
-        const prefixMatch = trimmed.match(PREFIX_RE);
-
-        if (prefixMatch) {
-          e.preventDefault();
-          const content = trimmed.replace(PREFIX_RE, "");
-
-          if (content.trim() === "") {
-            // 空条目：退出列表，回到上一级（或无缩进）
-            const upLevel  = Math.max(0, level - 1);
-            const upIndent = INDENT.repeat(upLevel);
-            ta.value = val.slice(0, lineStart) + upIndent + val.slice(lineStop);
-            const newPos = lineStart + upIndent.length;
-            ta.setSelectionRange(newPos, newPos);
-          } else {
-            // 继续编号：插入下一个同级编号
-            const np       = nextPrefix(prefixMatch[0]);
-            const insertion = "\n" + INDENT.repeat(level) + np;
-            ta.value = val.slice(0, start) + insertion + val.slice(start);
-            const newPos = start + insertion.length;
-            ta.setSelectionRange(newPos, newPos);
-          }
-          charCount.textContent = `${ta.value.length} 字`;
-          return;
+      const lineStop   = lineEndIdx === -1 ? val.length : lineEndIdx;
+      const line       = val.slice(lineStart, lineStop);
+      const level      = lineLevel(line);
+      if (level > 0 && PREFIX_RE.test(line.trimStart())) {
+        e.preventDefault();
+        const content = lineContent(line);
+        if (content.trim() === "") {
+          // 空条目：上升一级（level 1 时彻底退出列表）
+          const upLevel = Math.max(0, level - 1);
+          const newLine = INDENT.repeat(upLevel) + provPrefix(upLevel);
+          const newVal  = val.slice(0, lineStart) + newLine + val.slice(lineStop);
+          applyRenumbered(ta, newVal, lineStart + newLine.length);
+        } else {
+          // 插入下一个同级占位条目，renumberAll 会修正序号
+          const insertion = "\n" + INDENT.repeat(level) + provPrefix(level);
+          const newVal    = val.slice(0, start) + insertion + val.slice(start);
+          applyRenumbered(ta, newVal, start + insertion.length);
         }
+        return;
       }
     }
 
-    // Backspace：光标前全是空格则回退一级缩进
+    // Backspace：光标前全是缩进空格时回退一级
     if (e.key === "Backspace" && start === end) {
       const lineStart    = val.lastIndexOf("\n", start - 1) + 1;
       const beforeCursor = val.slice(lineStart, start);
       if (/^\s+$/.test(beforeCursor) && beforeCursor.length >= INDENT.length) {
         e.preventDefault();
-        const removeLen = INDENT.length;
-        ta.value = val.slice(0, start - removeLen) + val.slice(start);
-        ta.setSelectionRange(start - removeLen, start - removeLen);
+        ta.value = val.slice(0, start - INDENT.length) + val.slice(start);
+        ta.setSelectionRange(start - INDENT.length, start - INDENT.length);
         charCount.textContent = `${ta.value.length} 字`;
       }
     }
