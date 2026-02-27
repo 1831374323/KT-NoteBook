@@ -345,6 +345,14 @@
       opacity: 0.7;
     }
 
+    .tag-chip.unused {
+      opacity: 0.45;
+    }
+
+    .tag-chip.unused:hover {
+      opacity: 1;
+    }
+
     .note-list {
       margin-top: 6px;
       flex: 1;
@@ -439,6 +447,18 @@
       border-color: transparent;
       color: var(--primary);
       font-size: 12px;
+      transition: background 0.15s, border-color 0.15s, transform 0.12s;
+    }
+
+    .note-tags .tag-chip:hover {
+      background: #ddd6fe;
+      border-color: var(--primary);
+      transform: translateY(-1px);
+    }
+
+    .note-tags .tag-chip:active {
+      transform: translateY(0);
+      opacity: 0.8;
     }
 
     .note-empty {
@@ -893,7 +913,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.4</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.5</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -1055,7 +1075,14 @@
 
   /** @type {Note[]} */
   let notes = [];
+  /** 全局标签注册表：独立于 notes，删除某条笔记的 tag 时不会从此处移除 */
+  let tagList = new Set();
   let activeTag = null;
+
+  /** 将当前 notes + tagList 序列化为 JSON 字符串 */
+  function serializeData() {
+    return JSON.stringify({ notes, tags: [...tagList] });
+  }
 
   // --- 统一确认弹窗 ---
   (function () {
@@ -1126,10 +1153,10 @@
   }
 
   async function saveNotes() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+    localStorage.setItem(STORAGE_KEY, serializeData());
     setSyncBadge("syncing");
     try {
-      const blob = new Blob([JSON.stringify(notes)], { type: "application/json" });
+      const blob = new Blob([serializeData()], { type: "application/json" });
       const file = new File([blob], "notebook.json", { type: "application/json" });
       const uploadRes = await tcbApp.uploadFile({ cloudPath: CLOUD_PATH, filePath: file });
       // 持久化 SDK 返回的真实 fileID，避免手动拼接 bucket 名出错
@@ -1147,9 +1174,19 @@
   function loadNotesFromLocal() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      notes = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(notes)) notes = [];
-    } catch (e) { notes = []; }
+      if (!raw) { notes = []; tagList = new Set(); return; }
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        // 旧格式（仅 notes 数组），从 notes 中推导 tagList
+        notes = parsed;
+        tagList = new Set(notes.flatMap(n => n.tags || []));
+      } else {
+        notes   = Array.isArray(parsed.notes) ? parsed.notes : [];
+        tagList = new Set(Array.isArray(parsed.tags) ? parsed.tags : []);
+        // 确保 notes 里的 tag 也全部收录（防止旧数据缺失）
+        for (const n of notes) for (const t of (n.tags || [])) tagList.add(t);
+      }
+    } catch (e) { notes = []; tagList = new Set(); }
   }
 
   /**
@@ -1176,17 +1213,9 @@
     return Array.from(byId.values()).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
   }
 
-  // 获取当前所有已有标签
+  // 获取当前所有已有标签（直接返回全局注册表）
   function getAllExistingTags() {
-    const set = new Set();
-    for (const n of notes) {
-      if (Array.isArray(n.tags)) {
-        for (const t of n.tags) {
-          if (t) set.add(t);
-        }
-      }
-    }
-    return Array.from(set);
+    return [...tagList];
   }
 
   // 简单的标签提取：#标签 + 高频英文单词 + 文本中出现的已有标签
@@ -1256,21 +1285,16 @@
   const filterInfoEl = document.getElementById("filterInfo");
   const clearAllBtn = document.getElementById("clearAllBtn");
 
-  // 删除某个标签：从所有笔记中移除
+  // 删除某个标签：从所有笔记中移除，并从全局 tagList 注销
   function deleteTagEverywhere(tagToDelete) {
-    let changed = false;
     for (const note of notes) {
-      if (Array.isArray(note.tags) && note.tags.includes(tagToDelete)) {
+      if (Array.isArray(note.tags)) {
         note.tags = note.tags.filter((t) => t !== tagToDelete);
-        changed = true;
       }
     }
-    if (changed) {
-      saveNotes();
-    }
-    if (activeTag === tagToDelete) {
-      activeTag = null;
-    }
+    tagList.delete(tagToDelete);
+    saveNotes();
+    if (activeTag === tagToDelete) activeTag = null;
     render();
   }
 
@@ -1320,11 +1344,16 @@
   }
 
   function renderTags() {
+    // 统计各 tag 在 notes 中的使用次数
     const tagCount = new Map();
     for (const n of notes) {
       for (const t of n.tags || []) {
         tagCount.set(t, (tagCount.get(t) || 0) + 1);
       }
+    }
+    // 确保 tagList 中的 tag 全部出现（即使 count 为 0）
+    for (const t of tagList) {
+      if (!tagCount.has(t)) tagCount.set(t, 0);
     }
 
     tagListEl.innerHTML = "";
@@ -1336,11 +1365,12 @@
       return;
     }
 
-    const sortedTags = [...tagCount.entries()].sort((a, b) => b[1] - a[1]);
+    // 按使用次数降序，次数相同时按名称升序
+    const sortedTags = [...tagCount.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 
     for (const [tag, count] of sortedTags) {
       const div = document.createElement("div");
-      div.className = "tag-chip" + (activeTag === tag ? " active" : "");
+      div.className = "tag-chip" + (activeTag === tag ? " active" : "") + (count === 0 ? " unused" : "");
       div.textContent = tag;
 
       const countSpan = document.createElement("span");
@@ -1687,6 +1717,8 @@
 
   document.getElementById("modalConfirmBtn").addEventListener("click", () => {
     const finalTags = Array.from(modal.selectedSet);
+    // 将本次选中的 tag 全部注册到全局注册表
+    for (const t of finalTags) tagList.add(t);
     const now = new Date();
 
     if (editingNoteId != null) {
@@ -2021,7 +2053,8 @@
 
     // 从云存储读取笔记，与本地合并后再写回（避免直接覆盖导致多端丢数据）
     loadNotesFromLocal();
-    const localBeforeMerge = notes.length ? notes.slice() : [];
+    const localBeforeMerge  = notes.length  ? notes.slice()   : [];
+    const localTagsBeforeMerge = new Set(tagList);
 
     // 优先使用上次上传时 SDK 返回并持久化的真实 fileID，否则用硬编码的兜底值
     const savedFileId = localStorage.getItem(FILE_ID_KEY) || CLOUD_FILE_ID_DEFAULT;
@@ -2042,17 +2075,27 @@
         const resp = await fetch(freshUrl, { cache: "no-store" });
         if (resp.ok) {
           const data = await resp.json();
-          const cloudNotes = Array.isArray(data) ? data : [];
-          console.log(`[Storage] 云端 notebook.json 读取成功，条目数：${cloudNotes.length}`);
+          // 兼容旧格式（纯数组）与新格式（{ notes, tags }）
+          const cloudNotes = Array.isArray(data) ? data : (Array.isArray(data.notes) ? data.notes : []);
+          const cloudTags  = Array.isArray(data) ? [] : (Array.isArray(data.tags)  ? data.tags  : []);
+          console.log(`[Storage] 云端 notebook.json 读取成功，条目数：${cloudNotes.length}，标签数：${cloudTags.length}`);
+
+          // 合并 notes
           notes = mergeNotes(cloudNotes, localBeforeMerge);
-          console.log(`[Storage] 合并后条目数：${notes.length}（本地 ${localBeforeMerge.length} + 云端 ${cloudNotes.length}）`);
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+          // 合并 tagList：云端 + 本地的并集，再确保所有 note tag 都收录
+          tagList = new Set([...cloudTags, ...localTagsBeforeMerge]);
+          for (const n of notes) for (const t of (n.tags || [])) tagList.add(t);
+
+          console.log(`[Storage] 合并后条目数：${notes.length}（本地 ${localBeforeMerge.length} + 云端 ${cloudNotes.length}），标签数：${tagList.size}`);
+          localStorage.setItem(STORAGE_KEY, serializeData());
           setSyncBadge("online");
           // 若合并结果与云端不一致，上传合并后的完整数据，保证云上也是最新合并版
-          if (JSON.stringify(cloudNotes) !== JSON.stringify(notes)) {
+          const cloudPayloadStr  = JSON.stringify({ notes: cloudNotes, tags: cloudTags.sort() });
+          const mergedPayloadStr = JSON.stringify({ notes, tags: [...tagList].sort() });
+          if (cloudPayloadStr !== mergedPayloadStr) {
             console.log("[Storage] 云端与本地有差异，回写合并结果到云存储…");
             try {
-              const blob = new Blob([JSON.stringify(notes)], { type: "application/json" });
+              const blob = new Blob([serializeData()], { type: "application/json" });
               const file = new File([blob], "notebook.json", { type: "application/json" });
               const uploadRes = await tcbApp.uploadFile({ cloudPath: CLOUD_PATH, filePath: file });
               if (uploadRes?.fileID) localStorage.setItem(FILE_ID_KEY, uploadRes.fileID);
@@ -2080,6 +2123,19 @@
   // ── 更新日志数据 ──────────────────────────────────────────────────
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
+    {
+      version: "v0.2.5",
+      date: "2026-02-27",
+      type: "feat",
+      desc: "笔记内 tag hover 效果；tag 独立持久化",
+      items: [
+        "笔记卡片内的标签新增 hover 效果：鼠标悬停时背景加深、微微上浮，点击时弹性回弹",
+        "标签注册表独立于笔记存储：从某条笔记中删除标签，不再影响标签在侧边栏的存在",
+        "即使一个标签使用次数降至 0，它依然保留在标签列表中（显示 ×0，略微淡化），方便复用",
+        "仅「从所有笔记删除标签」操作才会将标签彻底注销",
+        "存储格式升级为 { notes, tags }，向前兼容旧格式（纯 notes 数组）"
+      ]
+    },
     {
       version: "v0.2.4",
       date: "2026-02-27",
