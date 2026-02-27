@@ -599,7 +599,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.1.4</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.1.5</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -1285,16 +1285,17 @@
   const INDENT = "  "; // 2空格为一级缩进
   const PREFIX_RE = /^(\d+\. |[a-z]\. |- )/; // 匹配各级编号前缀
 
-  // 统计某缩进级别下当前行之前已有多少条目（用于生成正确序号）
+  // 统计某缩进级别下当前行之前已有多少同级条目（精确匹配，不计子级）
   function countSiblings(level, lineStart, val) {
     if (level <= 0) return 0;
+    const exactLen = INDENT.length * level;
     const lines = val.slice(0, lineStart).split("\n");
-    const indent = INDENT.repeat(level);
     let count = 0;
     for (let i = lines.length - 1; i >= 0; i--) {
       const l = lines[i];
-      if (!l.startsWith(indent)) break;
-      if (l.trim() !== "") count++;
+      const indentLen = (l.match(/^(\s*)/) || ["",""])[1].length;
+      if (indentLen < exactLen) break;       // 遇到父级或更高层，停止
+      if (indentLen === exactLen && l.trim()) count++; // 只计恰好同级非空行
     }
     return count;
   }
@@ -1305,6 +1306,15 @@
     const n = countSiblings(level, lineStart, val) + 1;
     if (level === 1) return `${n}. `;
     if (level === 2) return `${String.fromCharCode(96 + n)}. `;
+    return "- ";
+  }
+
+  // 从已有编号前缀推算下一个前缀（用于 Enter 继续编号）
+  function nextPrefix(prefix) {
+    const numM = prefix.match(/^(\d+)\. /);
+    if (numM) return `${parseInt(numM[1]) + 1}. `;
+    const letM = prefix.match(/^([a-z])\. /);
+    if (letM) return `${String.fromCharCode(letM[1].charCodeAt(0) + 1)}. `;
     return "- ";
   }
 
@@ -1337,7 +1347,6 @@
     const newPrefix  = makePrefix(newLevel, lineStart, val);
     const newLine    = newIndent + newPrefix + content;
 
-    // 光标放在新前缀之后（正文起始处）
     const newCursorPos = lineStart + newLine.length - content.length;
 
     ta.value = val.slice(0, lineStart) + newLine + val.slice(lineStop);
@@ -1370,6 +1379,43 @@
         charCount.textContent = `${ta.value.length} 字`;
       }
       return;
+    }
+
+    // Enter：有编号时继续同级下一个编号
+    if (e.key === "Enter") {
+      const lineStart = val.lastIndexOf("\n", start - 1) + 1;
+      const lineEndIdx = val.indexOf("\n", start);
+      const lineStop  = lineEndIdx === -1 ? val.length : lineEndIdx;
+      const line      = val.slice(lineStart, lineStop);
+      const level     = lineLevel(line);
+
+      if (level > 0) {
+        const trimmed     = line.trimStart();
+        const prefixMatch = trimmed.match(PREFIX_RE);
+
+        if (prefixMatch) {
+          e.preventDefault();
+          const content = trimmed.replace(PREFIX_RE, "");
+
+          if (content.trim() === "") {
+            // 空条目：退出列表，回到上一级（或无缩进）
+            const upLevel  = Math.max(0, level - 1);
+            const upIndent = INDENT.repeat(upLevel);
+            ta.value = val.slice(0, lineStart) + upIndent + val.slice(lineStop);
+            const newPos = lineStart + upIndent.length;
+            ta.setSelectionRange(newPos, newPos);
+          } else {
+            // 继续编号：插入下一个同级编号
+            const np       = nextPrefix(prefixMatch[0]);
+            const insertion = "\n" + INDENT.repeat(level) + np;
+            ta.value = val.slice(0, start) + insertion + val.slice(start);
+            const newPos = start + insertion.length;
+            ta.setSelectionRange(newPos, newPos);
+          }
+          charCount.textContent = `${ta.value.length} 字`;
+          return;
+        }
+      }
     }
 
     // Backspace：光标前全是空格则回退一级缩进
