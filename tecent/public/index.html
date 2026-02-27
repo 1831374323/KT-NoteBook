@@ -263,7 +263,7 @@
       pointer-events: all;
     }
 
-    .editor-wrap.focused textarea {
+    .editor-wrap.focused .note-editor {
       border-top-left-radius: 0;
       border-top-right-radius: 0;
     }
@@ -315,55 +315,43 @@
       user-select: none;
     }
 
-    /* ── textarea + 镜像层容器 ── */
-    .textarea-wrap {
-      position: relative;
+    /* ── contenteditable 编辑器 ── */
+    .note-editor {
       flex: 1;
       min-height: 0;
+      overflow-y: auto;
       border-radius: 12px;
       border: 1px solid var(--border);
-      transition: border-color 0.15s, box-shadow 0.15s;
-      background: white;
-      overflow: hidden;
-    }
-
-    .textarea-wrap:focus-within {
-      border-color: var(--primary);
-      box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.2);
-    }
-
-    .editor-wrap.focused .textarea-wrap {
-      border-top-left-radius: 0;
-      border-top-right-radius: 0;
-    }
-
-    /* 镜像层：渲染 Markdown，绝对覆盖，不拦截交互 */
-    .editor-mirror {
-      position: absolute;
-      inset: 0;
       padding: 10px 12px;
       font-size: 16px;
       line-height: 1.6;
       font-family: inherit;
       box-sizing: border-box;
-      white-space: pre-wrap;
-      word-break: break-word;
-      overflow: hidden;
-      pointer-events: none;
-      z-index: 1;
+      outline: none;
       color: var(--text-main);
+      word-break: break-word;
+      white-space: pre-wrap;
+      transition: border-color 0.15s, box-shadow 0.15s;
     }
 
-    /* 格式标记（** _ `）：保留占位空间但完全透明 */
-    .md-mark {
-      color: transparent;
-      font-weight: normal !important;
-      font-style: normal !important;
+    .note-editor:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.2);
     }
 
-    .editor-mirror strong { font-weight: 600; color: var(--text-main); }
-    .editor-mirror em     { font-style: italic; }
-    .editor-mirror code   {
+    /* Placeholder */
+    .note-editor:empty::before {
+      content: attr(data-placeholder);
+      color: var(--text-sub);
+      opacity: 0.55;
+      pointer-events: none;
+      white-space: pre-line;
+    }
+
+    /* 编辑器内富文本样式 */
+    .note-editor strong { font-weight: 600; }
+    .note-editor em     { font-style: italic; }
+    .note-editor code   {
       font-family: "Menlo", "Consolas", monospace;
       font-size: 0.88em;
       background: #f1f5f9;
@@ -371,43 +359,8 @@
       padding: 0 3px;
     }
 
-    textarea {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      resize: none;
-      border: none;
-      border-radius: 0;
-      padding: 10px 12px;
-      font-size: 16px;
-      line-height: 1.6;
-      font-family: inherit;
-      box-sizing: border-box;
-      background: transparent;
-      color: transparent;
-      caret-color: var(--text-main);
-      z-index: 2;
-    }
-
-    /* 占位文字需要显式颜色（否则继承 color:transparent） */
-    textarea::placeholder {
-      color: var(--text-sub);
-      opacity: 0.6;
-    }
-
-    /* 选区半透明，使下方镜像层仍可见 */
-    textarea::selection {
-      background: rgba(99, 102, 241, 0.25);
-      color: transparent;
-    }
-
-    textarea:focus,
     input[type="date"]:focus {
       outline: none;
-    }
-
-    input[type="date"]:focus {
       border-color: var(--primary);
       box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.2);
     }
@@ -1083,7 +1036,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.8</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.9</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -1125,11 +1078,8 @@
           <div class="fmt-sep"></div>
           <button type="button" class="fmt-btn" data-fmt="code"   title="行内代码 (Ctrl+`)"><span style="font-family:monospace;font-size:12px;">`c`</span></button>
         </div>
-        <div class="textarea-wrap">
-          <!-- 镜像层：实时渲染 Markdown，pointer-events:none -->
-          <div class="editor-mirror" id="editorMirror" aria-hidden="true"></div>
-          <textarea id="noteInput" placeholder="今天学了什么？遇到什么问题？用自己的话总结一下吧～&#10;Tips: 输入 #标签 形式的关键词，会自动成为 tag，例如：#Unity #算法 #阅读"></textarea>
-        </div>
+        <div id="noteInput" class="note-editor" contenteditable="true" spellcheck="false"
+             data-placeholder="今天学了什么？遇到什么问题？用自己的话总结一下吧～&#10;Tips: 输入 #标签 形式的关键词，会自动成为 tag，例如：#Unity #算法 #阅读"></div>
       </div>
       <div class="card-footer">
         <div class="hint">
@@ -1319,63 +1269,239 @@
   }
 
   /**
-   * 将 raw 文本渲染到编辑器镜像层（textarea 背后的 WYSIWYG 层）。
-   * 格式标记（** _ `）保留原字符但变淡，便于光标对齐。
+   * 把 note.text 转为 HTML（兼容旧版 markdown 文本和新版 HTML 存储）。
+   * 如果文本已包含 HTML 格式标签，直接返回；否则走 markdown 渲染。
    */
-  function renderMirrorContent(raw) {
-    const mirror = document.getElementById("editorMirror");
-    if (!mirror) return;
-    if (!raw) { mirror.innerHTML = ""; return; }
-    const html = raw
-      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-      // **bold** → 淡化标记 + <strong>
-      .replace(/\*\*(.+?)\*\*/g,
-        '<span class="md-mark">**</span><strong>$1</strong><span class="md-mark">**</span>')
-      // `code`
-      .replace(/`([^`\n]+)`/g,
-        '<span class="md-mark">`</span><code>$1</code><span class="md-mark">`</span>')
-      // _italic_
-      .replace(/_([^_\n]+)_/g,
-        '<span class="md-mark">_</span><em>$1</em><span class="md-mark">_</span>')
-      .replace(/\n/g, "<br>");
-    mirror.innerHTML = html;
-    // 同步滚动位置
-    mirror.scrollTop = noteInput.scrollTop;
+  function noteToHtml(text) {
+    if (!text) return "";
+    if (/<(strong|em|code|br)\b/.test(text)) return text;
+    return renderMarkdown(text);
+  }
+
+  /** 把 note.text 转为纯文本（用于 autoTitle、字数、搜索等场景） */
+  function noteToPlain(text) {
+    if (!text) return "";
+    if (/<(strong|em|code|br)\b/.test(text)) {
+      const d = document.createElement("div");
+      d.innerHTML = text.replace(/<br\s*\/?>/gi, "\n");
+      return d.textContent;
+    }
+    return text;
+  }
+
+  /* ─────────── contenteditable 工具函数 ─────────── */
+
+  /** 从编辑器 innerHTML 提取纯文本（<br>→\n，剥离其他标签） */
+  function getEditorText() {
+    const clone = noteInput.cloneNode(true);
+    clone.querySelectorAll("br").forEach(br => br.replaceWith("\n"));
+    return clone.textContent;
+  }
+
+  /** 把 markdown 纯文本设置为编辑器 HTML 内容 */
+  function setEditorContent(text) {
+    noteInput.innerHTML = text ? renderMarkdown(text) : "";
+  }
+
+  /** 把编辑器 HTML 转换回 markdown 纯文本（用于存储） */
+  function editorToMarkdown() {
+    const html = noteInput.innerHTML;
+    if (!html) return "";
+    return html
+      .replace(/<strong>([\s\S]*?)<\/strong>/gi, "**$1**")
+      .replace(/<b>([\s\S]*?)<\/b>/gi,           "**$1**")
+      .replace(/<em>([\s\S]*?)<\/em>/gi,          "_$1_")
+      .replace(/<i>([\s\S]*?)<\/i>/gi,            "_$1_")
+      .replace(/<code>([\s\S]*?)<\/code>/gi,       "`$1`")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&amp;/g, "&").replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">").replace(/&nbsp;/g, " ");
+  }
+
+  /** 计算 DOM 节点 + 偏移在纯文本中的字符位置 */
+  function charOffset(targetNode, targetOffset) {
+    let count = 0;
+    function walk(node) {
+      if (node === targetNode) {
+        if (node.nodeType === Node.TEXT_NODE) {
+          count += targetOffset;
+        } else {
+          let i = 0;
+          for (const child of node.childNodes) {
+            if (i >= targetOffset) break;
+            count += countNodeChars(child);
+            i++;
+          }
+        }
+        return true;
+      }
+      if (node.nodeType === Node.TEXT_NODE) { count += node.length; return false; }
+      if (node.nodeName === "BR")           { count += 1;           return false; }
+      for (const child of node.childNodes) { if (walk(child)) return true; }
+      return false;
+    }
+    walk(noteInput);
+    return count;
+  }
+
+  function countNodeChars(node) {
+    if (!node) return 0;
+    if (node.nodeType === Node.TEXT_NODE) return node.length;
+    if (node.nodeName === "BR") return 1;
+    let t = 0;
+    for (const c of node.childNodes) t += countNodeChars(c);
+    return t;
+  }
+
+  function getCESelStart() {
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return 0;
+    const r = sel.getRangeAt(0);
+    return charOffset(r.startContainer, r.startOffset);
+  }
+
+  function getCESelEnd() {
+    const sel = window.getSelection();
+    if (!sel.rangeCount) return 0;
+    const r = sel.getRangeAt(0);
+    return charOffset(r.endContainer, r.endOffset);
+  }
+
+  /** 从纯文本偏移量找到对应的 DOM 节点 + 内部偏移 */
+  function findNodeOffset(targetOffset) {
+    let count = 0;
+    function walk(node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        if (count + node.length >= targetOffset) return [node, targetOffset - count];
+        count += node.length; return null;
+      }
+      if (node.nodeName === "BR") {
+        if (count + 1 >= targetOffset) {
+          const idx = Array.from(node.parentNode.childNodes).indexOf(node) + 1;
+          return [node.parentNode, idx];
+        }
+        count += 1; return null;
+      }
+      for (const child of node.childNodes) {
+        const r = walk(child);
+        if (r) return r;
+      }
+      return null;
+    }
+    return walk(noteInput) || [noteInput, noteInput.childNodes.length];
+  }
+
+  function setCESelection(start, end) {
+    try {
+      const [sNode, sOff] = findNodeOffset(start);
+      const [eNode, eOff] = findNodeOffset(end);
+      const range = document.createRange();
+      range.setStart(sNode, sOff);
+      range.setEnd(eNode, eOff);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch (e) { /* 光标恢复失败时忽略 */ }
   }
 
   /**
-   * 在 textarea 中对选区应用/撤销指定格式标记。
-   * 若无选区则插入空标记并把光标放中间。
+   * 从纯文本重建编辑器内容，尽量保留内联格式。
+   * 只有 line prefix 变化时（Tab/编号重排），直接修改对应文本节点，
+   * 其余情况才整行重建（会丢失该行内联格式，但属极少数边界场景）。
    */
-  function applyFormat(type) {
-    const ta = noteInput;
-    const s  = ta.selectionStart;
-    const e  = ta.selectionEnd;
-    const v  = ta.value;
-    const sel = v.slice(s, e);
-    const markers = { bold: "**", italic: "_", code: "`" };
-    const m = markers[type];
-    if (!m) return;
+  function setEditorFromPlain(newText) {
+    const oldLines = getEditorText().split("\n");
+    const newLines = newText.split("\n");
 
-    let newVal, newS, newE;
-    if (sel.startsWith(m) && sel.endsWith(m) && sel.length >= m.length * 2 + 1) {
-      // 已包裹 → 去除标记
-      const inner = sel.slice(m.length, -m.length);
-      newVal = v.slice(0, s) + inner + v.slice(e);
-      newS = s; newE = s + inner.length;
-    } else if (s === e) {
-      // 无选区 → 插入空标记，光标放中间
-      newVal = v.slice(0, s) + m + m + v.slice(s);
-      newS = newE = s + m.length;
-    } else {
-      // 包裹选区
-      newVal = v.slice(0, s) + m + sel + m + v.slice(e);
-      newS = s; newE = e + m.length * 2;
+    if (newLines.length !== oldLines.length) {
+      // 行数变化：整体重建
+      noteInput.innerHTML = renderMarkdown(newText);
+      return;
     }
-    ta.value = newVal;
-    ta.setSelectionRange(newS, newE);
-    ta.dispatchEvent(new Event("input"));
-    ta.focus();
+
+    for (let i = 0; i < newLines.length; i++) {
+      if (newLines[i] === oldLines[i]) continue;
+      const oldPl = prefixLength(oldLines[i] || "");
+      const newPl = prefixLength(newLines[i] || "");
+      // 前缀以外内容相同 → 只改首个文本节点的前缀部分
+      if ((newLines[i] || "").slice(newPl) === (oldLines[i] || "").slice(oldPl)) {
+        const tn = getLineFirstTextNode(i);
+        if (tn) { tn.textContent = newLines[i].slice(0, newPl) + tn.textContent.slice(oldPl); continue; }
+      }
+      // 整行重建（丢弃内联格式）
+      rebuildLine(i, newLines[i] || "");
+    }
+  }
+
+  function prefixLength(line) {
+    const level   = lineLevel(line);
+    const trimmed = line.trimStart();
+    const m       = trimmed.match(PREFIX_RE);
+    return level * INDENT.length + (m ? m[0].length : 0);
+  }
+
+  /** 获取第 lineIdx 行第一个文本节点 */
+  function getLineFirstTextNode(lineIdx) {
+    let line = 0;
+    for (const child of noteInput.childNodes) {
+      if (child.nodeName === "BR") { line++; continue; }
+      if (line === lineIdx) {
+        if (child.nodeType === Node.TEXT_NODE) return child;
+        return findFirstTextNode(child);
+      }
+    }
+    return null;
+  }
+
+  function findFirstTextNode(node) {
+    if (node.nodeType === Node.TEXT_NODE) return node;
+    for (const c of node.childNodes) { const r = findFirstTextNode(c); if (r) return r; }
+    return null;
+  }
+
+  /** 整行重建（最后手段，可能丢失该行内联格式） */
+  function rebuildLine(lineIdx, newPlain) {
+    const tn = getLineFirstTextNode(lineIdx);
+    if (!tn) return;
+    tn.textContent = newPlain;
+    // 删除该行后续所有内联节点直到 <br>
+    let next = tn.nextSibling;
+    while (next && next.nodeName !== "BR") {
+      const del = next; next = next.nextSibling; del.remove();
+    }
+  }
+
+  /** 对选区应用格式（bold/italic/code） */
+  function applyFormat(type) {
+    noteInput.focus();
+    if (type === "bold")   { document.execCommand("bold",   false, null); }
+    else if (type === "italic") { document.execCommand("italic", false, null); }
+    else if (type === "code") {
+      const sel = window.getSelection();
+      if (!sel.rangeCount) return;
+      const range = sel.getRangeAt(0);
+      if (range.collapsed) {
+        // 无选区：插入空 code 元素并将光标移入
+        const code = document.createElement("code");
+        code.textContent = "\u200b"; // 零宽空格占位
+        range.insertNode(code);
+        const nr = document.createRange();
+        nr.selectNodeContents(code);
+        nr.collapse(false);
+        sel.removeAllRanges(); sel.addRange(nr);
+      } else {
+        const text = range.toString();
+        const code = document.createElement("code");
+        code.textContent = text;
+        range.deleteContents();
+        range.insertNode(code);
+        const nr = document.createRange();
+        nr.setStartAfter(code); nr.collapse(true);
+        sel.removeAllRanges(); sel.addRange(nr);
+      }
+    }
+    noteInput.dispatchEvent(new Event("input"));
   }
 
   function getTodayStr() {
@@ -1531,10 +1657,9 @@
   function enterEditMode(note) {
     editingNoteId = note.id;
     titleInput.value = note.title || "";
-    noteInput.value  = note.text;
-    renderMirrorContent(note.text);
+    setEditorContent(note.text);
     dateInput.value  = note.date;
-    charCount.textContent = `${note.text.length} 字`;
+    charCount.textContent = `${getEditorText().length} 字`;
     saveBtn.textContent = "更新日志";
     cancelEditBtn.style.display = "";
     // 滚到编辑区
@@ -1546,8 +1671,7 @@
   function exitEditMode() {
     editingNoteId = null;
     titleInput.value = "";
-    noteInput.value  = "";
-    renderMirrorContent("");
+    noteInput.innerHTML = "";
     dateInput.value  = getTodayStr();
     charCount.textContent = "0 字";
     saveBtn.textContent = "保存日志";
@@ -1664,7 +1788,8 @@
 
   // 自动生成标题：取正文第一行前5字，超出加...
   function autoTitle(text) {
-    const firstLine = text.split("\n")[0].trim();
+    const plain     = noteToPlain(text);
+    const firstLine = plain.split("\n")[0].trim();
     return firstLine.length <= 5 ? firstLine : firstLine.slice(0, 5) + "…";
   }
 
@@ -1839,11 +1964,12 @@
       const body = document.createElement("div");
       body.className = "note-body";
       // 最多显示 5 行：超出时保留前 4 行，第 5 行显示省略号
-      const bodyLines = (note.text || "").split("\n");
-      const displayText = bodyLines.length > 5
+      const plain = noteToPlain(note.text || "");
+      const bodyLines = plain.split("\n");
+      const displayPlain = bodyLines.length > 5
         ? bodyLines.slice(0, 4).join("\n") + "\n…"
-        : (note.text || "");
-      body.innerHTML = renderMarkdown(displayText);
+        : plain;
+      body.innerHTML = noteToHtml(displayPlain);
 
       item.appendChild(titleEl);
       item.appendChild(body);
@@ -1898,7 +2024,8 @@
 
   // 弹窗状态
   const modal = {
-    pendingText: "",
+    pendingText: "",  // 纯文本（用于 tag 提取、显示）
+    pendingHtml: "",  // HTML（用于存储，保留格式）
     pendingTitle: "",
     pendingDate: "",
     selectedSet: new Set(),
@@ -1965,8 +2092,9 @@
   function closeTagModal() {
     tagModalEl.style.display = "none";
     modal.pendingText  = "";
+    modal.pendingHtml  = "";
     modal.pendingTitle = "";
-    modal.pendingDate = "";
+    modal.pendingDate  = "";
   }
 
   function addCustomTag() {
@@ -2011,7 +2139,7 @@
           title:    modal.pendingTitle,
           date:     modal.pendingDate,
           datetime: formatDatetime(now),
-          text:     modal.pendingText,
+          text:     modal.pendingHtml || modal.pendingText,
           tags:     finalTags,
         };
       }
@@ -2025,15 +2153,14 @@
         date: modal.pendingDate,
         title: modal.pendingTitle,
         datetime: formatDatetime(now),
-        text: modal.pendingText,
+        text: modal.pendingHtml || modal.pendingText,
         tags: finalTags,
         createdAt: now.getTime(),
       };
       notes.push(newNote);
       saveNotes();
       titleInput.value = "";
-      noteInput.value  = "";
-      renderMirrorContent("");
+      noteInput.innerHTML = "";
       charCount.textContent = "0 字";
       closeTagModal();
       render();
@@ -2042,7 +2169,7 @@
 
   // --- 事件绑定 ---
   saveBtn.addEventListener("click", () => {
-    const text  = noteInput.value.trim();
+    const text  = getEditorText().trim();   // 纯文本，用于 tag 提取
     const date  = dateInput.value || getTodayStr();
     const title = titleInput.value.trim();
 
@@ -2056,19 +2183,13 @@
       ? (notes.find(n => n.id === editingNoteId)?.tags || [])
       : [];
 
+    // 把当前 HTML 转回 markdown 存入 modal.pendingText（存储格式）
+    modal.pendingHtml = noteInput.innerHTML;
     openTagModal(text, date, title, preselected);
   });
 
   noteInput.addEventListener("input", () => {
-    const len = noteInput.value.length;
-    charCount.textContent = `${len} 字`;
-    renderMirrorContent(noteInput.value);
-  });
-
-  // 滚动时同步镜像层
-  noteInput.addEventListener("scroll", () => {
-    const mirror = document.getElementById("editorMirror");
-    if (mirror) mirror.scrollTop = noteInput.scrollTop;
+    charCount.textContent = `${getEditorText().length} 字`;
   });
 
   // --- Tab 缩进 + 自动编号 / Shift+Tab 回退层级 / Backspace 回退缩进 ---
@@ -2109,21 +2230,17 @@
 
   // 应用新文本 + 全局重新编号，光标定位到指定行行首的正文起始处
   function applyRenumbered(ta, newVal, cursorPos) {
-    // 计算光标所在行索引（在 newVal 中）
-    const lineIdx = (newVal.slice(0, cursorPos).match(/\n/g) || []).length;
+    const lineIdx    = (newVal.slice(0, cursorPos).match(/\n/g) || []).length;
     const renumbered = renumberAll(newVal);
     const newLines   = renumbered.split("\n");
-    // 重新计算光标：定位到该行正文起始（indent + prefix 之后）
     let pos = 0;
-    for (let i = 0; i < lineIdx && i < newLines.length; i++) {
-      pos += newLines[i].length + 1; // +1 换行符
-    }
-    const tLine   = newLines[Math.min(lineIdx, newLines.length - 1)] || "";
+    for (let i = 0; i < lineIdx && i < newLines.length; i++) pos += newLines[i].length + 1;
+    const tLine    = newLines[Math.min(lineIdx, newLines.length - 1)] || "";
     const tTrimmed = tLine.trimStart();
     const prefixLen = tLine.length - tTrimmed.length + (tTrimmed.match(PREFIX_RE) || [""])[0].length;
     pos += prefixLen;
-    ta.value = renumbered;
-    ta.setSelectionRange(pos, pos);
+    setEditorFromPlain(renumbered);
+    setCESelection(pos, pos);
     charCount.textContent = `${renumbered.length} 字`;
   }
 
@@ -2136,9 +2253,9 @@
   }
 
   // 修改当前行的层级（Tab / Shift+Tab）
-  function shiftLineLevel(ta, delta) {
-    const val   = ta.value;
-    const start = ta.selectionStart;
+  function shiftLineLevel(delta) {
+    const val        = getEditorText();
+    const start      = getCESelStart();
     const lineStart  = val.lastIndexOf("\n", start - 1) + 1;
     const lineEndIdx = val.indexOf("\n", start);
     const lineStop   = lineEndIdx === -1 ? val.length : lineEndIdx;
@@ -2147,13 +2264,19 @@
     const content    = lineContent(line);
     const newLine    = INDENT.repeat(newLevel) + provPrefix(newLevel) + content;
     const newVal     = val.slice(0, lineStart) + newLine + val.slice(lineStop);
-    // 光标定位到新行正文起始（renumberAll 会修正前缀，applyRenumbered 重新计算）
     const cursorPos  = lineStart + newLine.length - content.length;
-    applyRenumbered(ta, newVal, cursorPos);
+    applyRenumbered(null, newVal, cursorPos);
   }
 
   noteInput.addEventListener("keydown", (e) => {
-    const ta    = noteInput;
+    // CE 代理对象：让键盘处理逻辑可沿用纯文本 API
+    const ta = {
+      get value()          { return getEditorText(); },
+      set value(v)         { setEditorFromPlain(v); },
+      get selectionStart() { return getCESelStart(); },
+      get selectionEnd()   { return getCESelEnd();   },
+      setSelectionRange(s, end) { setCESelection(s, end); },
+    };
     const start = ta.selectionStart;
     const end   = ta.selectionEnd;
     const val   = ta.value;
@@ -2168,7 +2291,7 @@
     // Shift+Tab：升一级
     if (e.key === "Tab" && e.shiftKey) {
       e.preventDefault();
-      shiftLineLevel(ta, -1);
+      shiftLineLevel(-1);
       return;
     }
 
@@ -2176,7 +2299,7 @@
     if (e.key === "Tab" && !e.shiftKey) {
       e.preventDefault();
       if (start === end) {
-        shiftLineLevel(ta, +1);
+        shiftLineLevel(+1);
       } else {
         // 多选时只加缩进，不改编号
         ta.value = val.slice(0, start) + INDENT + val.slice(start);
@@ -2416,16 +2539,27 @@
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
     {
+      version: "v0.2.9",
+      date: "2026-02-27",
+      type: "feat",
+      desc: "编辑器升级为 contenteditable 真正所见即所得",
+      items: [
+        "编辑区改用 contenteditable div，加粗/斜体/代码直接呈现为富文本，无任何标记符号占位",
+        "退格、方向键、选区行为与普通文本编辑器完全一致，不再有「看不见的占位符」困扰",
+        "格式化快捷键（Ctrl+B / Ctrl+I / Ctrl+`）及工具栏按钮均已适配 contenteditable",
+        "Tab/Shift+Tab 缩进与自动编号逻辑保持不变，逐行更新 DOM 前缀，保留已有内联格式",
+        "笔记存储兼容新旧格式：旧笔记（markdown 文本）加载时自动转为富文本显示"
+      ]
+    },
+    {
       version: "v0.2.8",
       date: "2026-02-27",
       type: "feat",
-      desc: "编辑器 WYSIWYG 渲染（所见即所得）",
+      desc: "编辑器 WYSIWYG 渲染（镜像层方案）",
       items: [
-        "编辑区实时渲染加粗、斜体、行内代码，不再显示 **标记** 本身",
-        "格式标记（** _ `）以淡紫色小字保留在原位，保证光标位置精确对齐",
-        "选区以半透明蓝紫高亮显示，可透视下方渲染效果",
-        "滚动时镜像层与文字光标同步，长文不错位",
-        "笔记卡片中同步渲染行内代码样式"
+        "编辑区通过透明 textarea + 镜像 div 实现实时 markdown 渲染",
+        "格式标记（** _ `）以透明占位保留在原位",
+        "此版本因光标对齐问题已被 v0.2.9 contenteditable 方案取代"
       ]
     },
     {
