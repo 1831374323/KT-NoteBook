@@ -772,7 +772,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.1.8</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.1.9</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -1615,22 +1615,14 @@
       const indentLen    = lineLevel(line) * INDENT.length;
       const prefixMatch  = line.trimStart().match(PREFIX_RE);
 
-      // 情况A：光标恰在编号前缀末尾（indent + prefix 之后，内容之前）→ 删整行并重新编号
+      // 情况A：光标恰在编号前缀末尾（indent + prefix 之后，内容之前）
+      //        → 仅删除编号前缀，保留缩进和正文内容，然后重新编号
       if (prefixMatch && start === lineStart + indentLen + prefixMatch[0].length) {
         e.preventDefault();
-        // 删除当前行（含前面的换行符，若不是第一行；否则删后面的换行符）
-        let newVal;
-        let newCursorPos;
-        if (lineStart > 0) {
-          // 非首行：去掉前一个换行符 + 整行
-          newVal       = val.slice(0, lineStart - 1) + val.slice(lineStop);
-          newCursorPos = lineStart - 1;
-        } else {
-          // 首行：去掉整行 + 后面的换行符（如果有）
-          const after  = lineStop < val.length ? lineStop + 1 : lineStop;
-          newVal       = val.slice(after);
-          newCursorPos = 0;
-        }
+        // 去掉当前行的 prefix（保留缩进 + 正文）
+        const prefixLen  = prefixMatch[0].length;
+        const newVal     = val.slice(0, lineStart + indentLen) + val.slice(lineStart + indentLen + prefixLen);
+        const newCursorPos = lineStart + indentLen; // 光标停在（缩进之后、原正文起点）
         applyRenumbered(ta, newVal, newCursorPos);
         return;
       }
@@ -1798,6 +1790,16 @@
   // ── 更新日志数据 ──────────────────────────────────────────────────
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
+    {
+      version: "v0.1.9",
+      date: "2026-02-27",
+      type: "fix",
+      desc: "Backspace 删除编号前缀改为只移除前缀，保留正文",
+      items: [
+        "在编号前缀末尾（光标紧贴正文起点）按 Backspace，只删除 「1. 」「a. 」「- 」等前缀，正文内容留在原行",
+        "删除前缀后自动重新编号，后续序号连续更新"
+      ]
+    },
     {
       version: "v0.1.8",
       date: "2026-02-27",
