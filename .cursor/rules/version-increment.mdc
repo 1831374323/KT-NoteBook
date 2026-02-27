@@ -1,0 +1,22 @@
+---
+description: 每次提交 tecent/public/index.html 时自动递增版本号最后一位
+globs: tecent/public/index.html
+alwaysApply: true
+---
+
+# 版本号递增规则
+
+每次对 `tecent/public/index.html` 进行修改并 push 时：
+
+1. 找到文件中的版本号：`<span ...>v{major}.{minor}.{patch}</span>`
+2. 将 `patch` 加 1（最后一位 +1）
+3. commit message 中注明新版本号，格式：`v{version} - {改动描述}`
+
+## 示例
+
+- 当前 `v1.0.3` → 本次改动后改为 `v1.0.4`
+- 当前 `v0.1.4` → 本次改动后改为 `v0.1.5`
+
+## 例外
+
+仅当用户明确指定版本号时（如"版本号1.2.0"），使用用户指定的值，不自动递增。

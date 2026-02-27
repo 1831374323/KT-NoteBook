@@ -599,7 +599,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v1.0.3</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.1.4</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -1281,8 +1281,69 @@
     charCount.textContent = `${len} 字`;
   });
 
-  // --- Tab 缩进 + 自动编号 / Backspace 回退缩进 ---
+  // --- Tab 缩进 + 自动编号 / Shift+Tab 回退层级 / Backspace 回退缩进 ---
   const INDENT = "  "; // 2空格为一级缩进
+  const PREFIX_RE = /^(\d+\. |[a-z]\. |- )/; // 匹配各级编号前缀
+
+  // 统计某缩进级别下当前行之前已有多少条目（用于生成正确序号）
+  function countSiblings(level, lineStart, val) {
+    if (level <= 0) return 0;
+    const lines = val.slice(0, lineStart).split("\n");
+    const indent = INDENT.repeat(level);
+    let count = 0;
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const l = lines[i];
+      if (!l.startsWith(indent)) break;
+      if (l.trim() !== "") count++;
+    }
+    return count;
+  }
+
+  // 根据层级和同级数量生成前缀
+  function makePrefix(level, lineStart, val) {
+    if (level <= 0) return "";
+    const n = countSiblings(level, lineStart, val) + 1;
+    if (level === 1) return `${n}. `;
+    if (level === 2) return `${String.fromCharCode(96 + n)}. `;
+    return "- ";
+  }
+
+  // 获取一行的纯文字内容（去掉缩进和编号前缀）
+  function lineContent(line) {
+    return line.replace(/^\s*/, "").replace(PREFIX_RE, "");
+  }
+
+  // 获取一行当前的缩进级别
+  function lineLevel(line) {
+    const m = line.match(/^(\s*)/);
+    return m ? Math.floor(m[1].length / INDENT.length) : 0;
+  }
+
+  // 对当前行应用层级变化（delta = +1 或 -1），重新生成缩进+编号
+  function shiftLineLevel(ta, delta) {
+    const val   = ta.value;
+    const start = ta.selectionStart;
+
+    const lineStart = val.lastIndexOf("\n", start - 1) + 1;
+    const lineEnd   = val.indexOf("\n", start);
+    const lineStop  = lineEnd === -1 ? val.length : lineEnd;
+    const line      = val.slice(lineStart, lineStop);
+
+    const curLevel  = lineLevel(line);
+    const newLevel  = Math.max(0, curLevel + delta);
+    const content   = lineContent(line);
+
+    const newIndent  = INDENT.repeat(newLevel);
+    const newPrefix  = makePrefix(newLevel, lineStart, val);
+    const newLine    = newIndent + newPrefix + content;
+
+    // 光标放在新前缀之后（正文起始处）
+    const newCursorPos = lineStart + newLine.length - content.length;
+
+    ta.value = val.slice(0, lineStart) + newLine + val.slice(lineStop);
+    ta.setSelectionRange(newCursorPos, newCursorPos);
+    charCount.textContent = `${ta.value.length} 字`;
+  }
 
   noteInput.addEventListener("keydown", (e) => {
     const ta    = noteInput;
@@ -1290,55 +1351,30 @@
     const end   = ta.selectionEnd;
     const val   = ta.value;
 
-    if (e.key === "Tab") {
+    // Shift+Tab：当前行升一级
+    if (e.key === "Tab" && e.shiftKey) {
       e.preventDefault();
-
-      // 找到当前行起始位置
-      const lineStart = val.lastIndexOf("\n", start - 1) + 1;
-      const lineText  = val.slice(lineStart, start);
-
-      // 计算当前缩进级别
-      const indentMatch = lineText.match(/^(\s*)/);
-      const currentIndent = indentMatch ? indentMatch[1] : "";
-      const newIndent = currentIndent + INDENT;
-      const indentLevel = newIndent.length / INDENT.length;
-
-      // 生成编号前缀（第1级：1. 2. 3.，第2级：a. b.，第3级：- ）
-      function getPrefix(level, lineStart, val) {
-        if (level <= 0) return "";
-        // 统计同级已有编号数量
-        const lines = val.slice(0, lineStart).split("\n");
-        const indent = INDENT.repeat(level);
-        let count = 0;
-        for (let i = lines.length - 1; i >= 0; i--) {
-          const l = lines[i];
-          if (!l.startsWith(indent)) break;
-          if (l.trim() !== "") count++;
-        }
-        if (level === 1) return `${count + 1}. `;
-        if (level === 2) return `${String.fromCharCode(96 + count + 1)}. `;
-        return "- ";
-      }
-
-      const prefix = getPrefix(indentLevel, lineStart, val);
-      const insertion = newIndent + prefix;
-
-      // 如果光标在行首或行全是空白，给当前行加缩进+编号
-      if (start === end) {
-        ta.value = val.slice(0, lineStart) + insertion + val.slice(lineStart).replace(/^\s*/, "");
-        const newPos = lineStart + insertion.length;
-        ta.setSelectionRange(newPos, newPos);
-      } else {
-        // 选中多行：统一加缩进
-        ta.value = val.slice(0, start) + INDENT + val.slice(start);
-        ta.setSelectionRange(start + INDENT.length, end + INDENT.length);
-      }
-      charCount.textContent = `${ta.value.length} 字`;
+      shiftLineLevel(ta, -1);
+      return;
     }
 
+    // Tab：当前行降一级（有编号则替换，无编号则新增）
+    if (e.key === "Tab" && !e.shiftKey) {
+      e.preventDefault();
+      if (start === end) {
+        shiftLineLevel(ta, +1);
+      } else {
+        // 选中多行时：仅加缩进，不改编号
+        ta.value = val.slice(0, start) + INDENT + val.slice(start);
+        ta.setSelectionRange(start + INDENT.length, end + INDENT.length);
+        charCount.textContent = `${ta.value.length} 字`;
+      }
+      return;
+    }
+
+    // Backspace：光标前全是空格则回退一级缩进
     if (e.key === "Backspace" && start === end) {
-      // 检查光标前是否是纯缩进（空格）
-      const lineStart = val.lastIndexOf("\n", start - 1) + 1;
+      const lineStart    = val.lastIndexOf("\n", start - 1) + 1;
       const beforeCursor = val.slice(lineStart, start);
       if (/^\s+$/.test(beforeCursor) && beforeCursor.length >= INDENT.length) {
         e.preventDefault();
