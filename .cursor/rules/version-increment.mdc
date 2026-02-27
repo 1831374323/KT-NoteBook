@@ -1,5 +1,5 @@
 ---
-description: 每次提交 tecent/public/index.html 时自动递增版本号最后一位
+description: 每次提交 tecent/public/index.html 时自动递增版本号并维护更新记录
 globs: tecent/public/index.html
 alwaysApply: true
 ---
@@ -20,3 +20,46 @@ alwaysApply: true
 ## 例外
 
 仅当用户明确指定版本号时（如"版本号1.2.0"），使用用户指定的值，不自动递增。
+
+---
+
+# 更新日志维护规则
+
+每次对 `tecent/public/index.html` 进行功能修改时，**必须同步维护**文件内的 `CHANGELOG` 数组：
+
+## 位置
+
+`CHANGELOG` 常量位于 `tecent/public/index.html` 的 `<script>` 块中，格式如下：
+
+```js
+const CHANGELOG = [
+  {
+    version: "v{新版本号}",
+    date: "{YYYY-MM-DD}",
+    type: "feat",       // feat | fix | infra
+    desc: "本次版本的一句话总结",
+    items: [
+      "具体改动 1（比 git commit message 更详细）",
+      "具体改动 2",
+    ]
+  },
+  // ...旧条目保留，不删除
+];
+```
+
+## 字段说明
+
+| 字段 | 说明 |
+|---|---|
+| `version` | 与 header 中版本号一致，如 `v0.1.7` |
+| `date` | 本次修改日期，格式 `YYYY-MM-DD` |
+| `type` | `feat`（新功能）/ `fix`（修复）/ `infra`（基础设施/部署） |
+| `desc` | 一句话概括，展示为条目标题 |
+| `items` | 详细改动列表，要比 git commit message 更具体，用用户能理解的语言描述 |
+
+## 要求
+
+- **每次版本递增时，必须在 CHANGELOG 头部插入新条目**，旧条目保留不删除
+- items 描述要**面向用户**，避免技术术语，聚焦"做了什么、解决了什么问题"
+- 一个版本可以有多条 items
+- 日期使用本次实际修改的日期
