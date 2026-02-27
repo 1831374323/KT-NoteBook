@@ -650,6 +650,66 @@
       font-style: italic;
     }
 
+    /* ── 统一确认弹窗 ── */
+    .confirm-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      backdrop-filter: blur(5px);
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      animation: fadeIn 0.15s ease;
+    }
+
+    .confirm-card {
+      background: white;
+      border-radius: 18px;
+      box-shadow: 0 24px 64px rgba(15, 23, 42, 0.2);
+      width: 100%;
+      max-width: 360px;
+      padding: 28px 28px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      animation: slideUp 0.18s ease;
+    }
+
+    .confirm-icon {
+      font-size: 32px;
+      line-height: 1;
+    }
+
+    .confirm-message {
+      font-size: 15px;
+      color: var(--text-main);
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+
+    .confirm-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      padding-top: 6px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* 危险操作按钮（红色）*/
+    button.danger {
+      background: #ef4444;
+      color: white;
+    }
+    button.danger:hover {
+      background: #dc2626;
+      box-shadow: 0 2px 8px rgba(239, 68, 68, 0.35);
+    }
+    button.danger:active {
+      opacity: 0.85;
+    }
+
     /* ── 更新日志抽屉 ── */
     .changelog-btn {
       background: transparent;
@@ -833,7 +893,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.3</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.4</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -957,6 +1017,18 @@
   </div>
 </div>
 
+<!-- 统一确认弹窗 -->
+<div id="confirmModal" class="confirm-overlay" style="display:none;">
+  <div class="confirm-card">
+    <div class="confirm-icon" id="confirmIcon">⚠️</div>
+    <div class="confirm-message" id="confirmMessage"></div>
+    <div class="confirm-footer">
+      <button id="confirmCancelBtn" class="outline">取消</button>
+      <button id="confirmOkBtn" class="danger">确认</button>
+    </div>
+  </div>
+</div>
+
 <script>
   // --- 腾讯云开发 TCB SDK (2.24+ 认证 API) ---
   const tcbApp = cloudbase.init({
@@ -984,6 +1056,40 @@
   /** @type {Note[]} */
   let notes = [];
   let activeTag = null;
+
+  // --- 统一确认弹窗 ---
+  (function () {
+    const overlay    = document.getElementById("confirmModal");
+    const msgEl      = document.getElementById("confirmMessage");
+    const iconEl     = document.getElementById("confirmIcon");
+    const okBtn      = document.getElementById("confirmOkBtn");
+    const cancelBtn  = document.getElementById("confirmCancelBtn");
+    let _cb = null;
+
+    window.showConfirm = function (message, onConfirm, { okText = "确认", icon = "⚠️" } = {}) {
+      msgEl.textContent    = message;
+      iconEl.textContent   = icon;
+      okBtn.textContent    = okText;
+      _cb = onConfirm;
+      overlay.style.display = "flex";
+    };
+
+    function hide() {
+      overlay.style.display = "none";
+      _cb = null;
+    }
+
+    okBtn.addEventListener("click", () => {
+      const cb = _cb;
+      hide();
+      if (cb) cb();
+    });
+    cancelBtn.addEventListener("click", hide);
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) hide(); });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && overlay.style.display !== "none") { e.stopPropagation(); hide(); }
+    }, true);
+  })();
 
   // --- 工具函数 ---
   function getTodayStr() {
@@ -1305,8 +1411,11 @@
     if (!ctxTag) return;
     const tag = ctxTag;
     hideTagCtxMenu();
-    if (!confirm(`从所有笔记中删除标签「${tag}」？\n此操作不可恢复。`)) return;
-    deleteTagEverywhere(tag);
+    showConfirm(
+      `从所有笔记中删除标签「${tag}」？\n此操作不可恢复。`,
+      () => deleteTagEverywhere(tag),
+      { okText: "确认删除", icon: "🗑️" }
+    );
   });
 
   // --- 笔记卡片内 tag 右键菜单（仅从本条笔记删除）---
@@ -1341,13 +1450,18 @@
     if (!ctxNoteTagInfo) return;
     const { tag, noteId } = ctxNoteTagInfo;
     hideNoteTagCtxMenu();
-    if (!confirm(`从本条笔记中删除标签「${tag}」？`)) return;
-    const note = notes.find(n => n.id === noteId);
-    if (note) {
-      note.tags = note.tags.filter(t => t !== tag);
-      saveNotes();
-      render();
-    }
+    showConfirm(
+      `从本条笔记中删除标签「${tag}」？`,
+      () => {
+        const note = notes.find(n => n.id === noteId);
+        if (note) {
+          note.tags = note.tags.filter(t => t !== tag);
+          saveNotes();
+          render();
+        }
+      },
+      { okText: "确认删除", icon: "🏷️" }
+    );
   });
 
   document.addEventListener("click", () => { hideCtxMenu(); hideTagCtxMenu(); hideNoteTagCtxMenu(); });
@@ -1357,10 +1471,17 @@
 
   ctxDelete.addEventListener("click", () => {
     if (ctxNoteId == null) return;
-    notes = notes.filter(n => n.id !== ctxNoteId);
-    saveNotes();
-    render();
+    const id = ctxNoteId;
     hideCtxMenu();
+    showConfirm(
+      "确定要删除这条笔记吗？\n此操作不可恢复。",
+      () => {
+        notes = notes.filter(n => n.id !== id);
+        saveNotes();
+        render();
+      },
+      { okText: "删除笔记", icon: "🗑️" }
+    );
   });
 
   function renderNotes() {
@@ -1805,12 +1926,16 @@
 
   clearAllBtn.addEventListener("click", () => {
     if (notes.length === 0) return;
-    const ok = confirm("确定要清空所有笔记吗？此操作不可恢复。");
-    if (!ok) return;
-    notes = [];
-    saveNotes();
-    activeTag = null;
-    render();
+    showConfirm(
+      "确定要清空所有笔记吗？\n此操作不可恢复，所有数据将被永久删除。",
+      () => {
+        notes = [];
+        saveNotes();
+        activeTag = null;
+        render();
+      },
+      { okText: "清空全部", icon: "⚠️" }
+    );
   });
 
   // --- 面板拖拽调节 ---
@@ -1955,6 +2080,18 @@
   // ── 更新日志数据 ──────────────────────────────────────────────────
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
+    {
+      version: "v0.2.4",
+      date: "2026-02-27",
+      type: "feat",
+      desc: "统一确认弹窗；删除笔记增加确认",
+      items: [
+        "新增统一风格的「确认提示」弹窗，替换所有浏览器原生 confirm 弹框，视觉与应用整体风格一致",
+        "删除单条笔记时，也会弹出确认提示，防止误删",
+        "全局删除标签、笔记内删除标签、清空所有笔记均使用同一套确认弹窗",
+        "弹窗支持点击遮罩或按 Esc 取消"
+      ]
+    },
     {
       version: "v0.2.3",
       date: "2026-02-27",
