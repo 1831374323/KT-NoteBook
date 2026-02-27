@@ -1272,18 +1272,28 @@
    * 把 note.text 转为 HTML（兼容旧版 markdown 文本和新版 HTML 存储）。
    * 如果文本已包含 HTML 格式标签，直接返回；否则走 markdown 渲染。
    */
+  /** 把 note.text 中的 <div> 行结构规范化为 <br>（兼容 contenteditable 旧存档） */
+  function normalizeHtmlLines(html) {
+    return html
+      .replace(/<div>/gi,  "<br>")
+      .replace(/<\/div>/gi, "")
+      .replace(/^<br>/i, "");   // 去掉开头多余的 <br>
+  }
+
   function noteToHtml(text) {
     if (!text) return "";
-    if (/<(strong|em|code|br)\b/.test(text)) return text;
+    // 含 HTML 标签（新格式）→ 规范化后直接用
+    if (/<(strong|em|code|br|div|b|i)\b/.test(text)) return normalizeHtmlLines(text);
     return renderMarkdown(text);
   }
 
   /** 把 note.text 转为纯文本（用于 autoTitle、字数、搜索等场景） */
   function noteToPlain(text) {
     if (!text) return "";
-    if (/<(strong|em|code|br)\b/.test(text)) {
+    if (/<(strong|em|code|br|div|b|i)\b/.test(text)) {
       const d = document.createElement("div");
-      d.innerHTML = text.replace(/<br\s*\/?>/gi, "\n");
+      d.innerHTML = normalizeHtmlLines(text);
+      d.querySelectorAll("br").forEach(br => br.replaceWith("\n"));
       return d.textContent;
     }
     return text;
@@ -1291,16 +1301,20 @@
 
   /* ─────────── contenteditable 工具函数 ─────────── */
 
-  /** 从编辑器 innerHTML 提取纯文本（<br>→\n，剥离其他标签） */
+  /** 从编辑器 innerHTML 提取纯文本（<br>/<div> → \n，剥离其他标签） */
   function getEditorText() {
     const clone = noteInput.cloneNode(true);
+    // <div> 表示换行（Chrome contenteditable 会产生 div）
+    clone.querySelectorAll("div").forEach(div => {
+      div.parentNode.insertBefore(document.createTextNode("\n"), div);
+    });
     clone.querySelectorAll("br").forEach(br => br.replaceWith("\n"));
     return clone.textContent;
   }
 
-  /** 把 markdown 纯文本设置为编辑器 HTML 内容 */
+  /** 把 markdown / HTML 文本设置为编辑器内容 */
   function setEditorContent(text) {
-    noteInput.innerHTML = text ? renderMarkdown(text) : "";
+    noteInput.innerHTML = text ? noteToHtml(text) : "";
   }
 
   /** 把编辑器 HTML 转换回 markdown 纯文本（用于存储） */
@@ -1314,9 +1328,14 @@
       .replace(/<i>([\s\S]*?)<\/i>/gi,            "_$1_")
       .replace(/<code>([\s\S]*?)<\/code>/gi,       "`$1`")
       .replace(/<br\s*\/?>/gi, "\n")
+      // <div>…</div> → \n… （Chrome contenteditable 换行结构）
+      .replace(/<div>/gi,  "\n")
+      .replace(/<\/div>/gi, "")
       .replace(/<[^>]+>/g, "")
       .replace(/&amp;/g, "&").replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">").replace(/&nbsp;/g, " ");
+      .replace(/&gt;/g, ">").replace(/&nbsp;/g, " ")
+      .replace(/\n{2,}/g, "\n")   // 合并多余空行
+      .trim();
   }
 
   /** 计算 DOM 节点 + 偏移在纯文本中的字符位置 */
@@ -1338,6 +1357,9 @@
       }
       if (node.nodeType === Node.TEXT_NODE) { count += node.length; return false; }
       if (node.nodeName === "BR")           { count += 1;           return false; }
+      // <div> 相当于一个换行前缀
+      const isDiv = node.nodeName === "DIV" && node !== noteInput;
+      if (isDiv) count += 1;
       for (const child of node.childNodes) { if (walk(child)) return true; }
       return false;
     }
@@ -1348,7 +1370,8 @@
   function countNodeChars(node) {
     if (!node) return 0;
     if (node.nodeType === Node.TEXT_NODE) return node.length;
-    if (node.nodeName === "BR") return 1;
+    if (node.nodeName === "BR")  return 1;
+    if (node.nodeName === "DIV") return 1 + Array.from(node.childNodes).reduce((s, c) => s + countNodeChars(c), 0);
     let t = 0;
     for (const c of node.childNodes) t += countNodeChars(c);
     return t;
@@ -2309,15 +2332,15 @@
       return;
     }
 
-    // Enter：有编号时继续同级编号
+    // Enter：有编号时继续同级编号；否则插入 <br> 保持扁平结构
     if (e.key === "Enter") {
+      e.preventDefault();
       const lineStart  = val.lastIndexOf("\n", start - 1) + 1;
       const lineEndIdx = val.indexOf("\n", start);
       const lineStop   = lineEndIdx === -1 ? val.length : lineEndIdx;
       const line       = val.slice(lineStart, lineStop);
       const level      = lineLevel(line);
       if (level > 0 && PREFIX_RE.test(line.trimStart())) {
-        e.preventDefault();
         const content = lineContent(line);
         if (content.trim() === "") {
           // 空条目：上升一级（level 1 时彻底退出列表）
@@ -2333,6 +2356,9 @@
         }
         return;
       }
+      // 普通换行：插入 <br> 使结构扁平，避免浏览器生成 <div>
+      document.execCommand("insertLineBreak");
+      return;
     }
 
     // Backspace：有两种情况
