@@ -772,7 +772,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.1.7</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.1.8</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -1248,7 +1248,11 @@
 
       const body = document.createElement("div");
       body.className = "note-body";
-      body.textContent = note.text;
+      // 最多显示 5 行：超出时保留前 4 行，第 5 行显示省略号
+      const bodyLines = (note.text || "").split("\n");
+      body.textContent = bodyLines.length > 5
+        ? bodyLines.slice(0, 4).join("\n") + "\n…"
+        : note.text;
 
       item.appendChild(titleEl);
       item.appendChild(body);
@@ -1601,10 +1605,37 @@
       }
     }
 
-    // Backspace：光标前全是缩进空格时回退一级
+    // Backspace：有两种情况
     if (e.key === "Backspace" && start === end) {
       const lineStart    = val.lastIndexOf("\n", start - 1) + 1;
+      const lineEndIdx   = val.indexOf("\n", start);
+      const lineStop     = lineEndIdx === -1 ? val.length : lineEndIdx;
+      const line         = val.slice(lineStart, lineStop);
       const beforeCursor = val.slice(lineStart, start);
+      const indentLen    = lineLevel(line) * INDENT.length;
+      const prefixMatch  = line.trimStart().match(PREFIX_RE);
+
+      // 情况A：光标恰在编号前缀末尾（indent + prefix 之后，内容之前）→ 删整行并重新编号
+      if (prefixMatch && start === lineStart + indentLen + prefixMatch[0].length) {
+        e.preventDefault();
+        // 删除当前行（含前面的换行符，若不是第一行；否则删后面的换行符）
+        let newVal;
+        let newCursorPos;
+        if (lineStart > 0) {
+          // 非首行：去掉前一个换行符 + 整行
+          newVal       = val.slice(0, lineStart - 1) + val.slice(lineStop);
+          newCursorPos = lineStart - 1;
+        } else {
+          // 首行：去掉整行 + 后面的换行符（如果有）
+          const after  = lineStop < val.length ? lineStop + 1 : lineStop;
+          newVal       = val.slice(after);
+          newCursorPos = 0;
+        }
+        applyRenumbered(ta, newVal, newCursorPos);
+        return;
+      }
+
+      // 情况B：光标前全是缩进空格时回退一级
       if (/^\s+$/.test(beforeCursor) && beforeCursor.length >= INDENT.length) {
         e.preventDefault();
         ta.value = val.slice(0, start - INDENT.length) + val.slice(start);
@@ -1767,6 +1798,17 @@
   // ── 更新日志数据 ──────────────────────────────────────────────────
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
+    {
+      version: "v0.1.8",
+      date: "2026-02-27",
+      type: "feat",
+      desc: "笔记卡片 5 行截断 + Backspace 删行重编号",
+      items: [
+        "笔记列表卡片：正文超过 5 行时，第 5 行自动显示「…」省略，保持列表整洁",
+        "编号模式下，光标在编号前缀末尾（内容起点）按 Backspace，直接删除整行并自动重新编号",
+        "修复了删除编号后序号不连续的问题（如删除第 2 条后，后续条目仍显示 3、4，现在会重排为 2、3）"
+      ]
+    },
     {
       version: "v0.1.7",
       date: "2026-02-27",
