@@ -23,7 +23,8 @@
 
     body {
       margin: 0;
-      min-height: 100vh;
+      height: 100vh;
+      overflow: hidden;
       background: radial-gradient(circle at top left, #eef2ff 0, #f4f4f5 45%, #fafafa 100%);
       color: var(--text-main);
       display: flex;
@@ -34,8 +35,12 @@
     .app {
       max-width: 1200px;
       width: 100%;
-      margin: 4vh auto;
-      padding: 24px;
+      height: 100vh;
+      margin: 0 auto;
+      padding: 16px 24px 12px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
     }
 
     header {
@@ -118,21 +123,27 @@
       display: flex;
       gap: 0;
       align-items: stretch;
+      flex: 1;
+      min-height: 0;
     }
 
     .pane-left,
     .pane-right {
-      min-width: 200px;
       flex-shrink: 0;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
     }
 
+    /* 最小宽度保证 h2 标题行不换行 */
     .pane-left {
       flex: 1.2;
+      min-width: 310px;
     }
 
     .pane-right {
       flex: 1;
+      min-width: 250px;
     }
 
     .resize-handle {
@@ -181,18 +192,23 @@
       background: rgba(255, 255, 255, 0.9);
       border-radius: 16px;
       border: 1px solid rgba(228, 228, 231, 0.9);
-      padding: 20px 22px;
+      padding: 16px 22px 14px;
       box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
       backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
     }
 
     .card h2 {
-      margin: 0 0 12px;
+      margin: 0 0 10px;
       font-size: 18px;
       display: flex;
       justify-content: space-between;
       align-items: center;
       color: var(--text-main);
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .card h2 span.sub {
@@ -203,14 +219,16 @@
 
     textarea {
       width: 100%;
-      min-height: 180px;
-      resize: vertical;
+      flex: 1;
+      min-height: 0;
+      resize: none;
       border-radius: 12px;
       border: 1px solid var(--border);
       padding: 10px 12px;
       font-size: 16px;
       line-height: 1.6;
       font-family: inherit;
+      box-sizing: border-box;
     }
 
     textarea:focus,
@@ -227,6 +245,7 @@
       align-items: center;
       gap: 8px;
       flex-wrap: wrap;
+      flex-shrink: 0;
     }
 
     .hint {
@@ -243,6 +262,15 @@
 
     .section {
       margin-top: 12px;
+      flex-shrink: 0;
+    }
+
+    /* 右侧最后一个 section（笔记列表）撑满剩余高度 */
+    .pane-right .section:last-child {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
     }
 
     .section-title {
@@ -289,7 +317,8 @@
 
     .note-list {
       margin-top: 6px;
-      max-height: 460px;
+      flex: 1;
+      min-height: 0;
       overflow-y: auto;
       padding-right: 4px;
     }
@@ -304,6 +333,8 @@
       background: white;
       margin-bottom: 8px;
       outline: none;
+      flex-shrink: 0;
+      box-sizing: border-box;
     }
 
     #titleInput:focus {
@@ -772,7 +803,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.1.9</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.0</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -1676,13 +1707,16 @@
   document.addEventListener("mousemove", (e) => {
     if (!isResizing) return;
     const dx = e.clientX - resizeStartX;
-    const minWidth = 200;
-    const maxLeft = resizeStartLeftWidth + resizeStartRightWidth - minWidth;
-    let newLeft = Math.max(minWidth, Math.min(maxLeft, resizeStartLeftWidth + dx));
-    let newRight = resizeStartLeftWidth + resizeStartRightWidth - newLeft;
-    paneLeft.style.flex = "none";
+    // 与 CSS min-width 保持一致，防止 h2 标题行换行
+    const minLeft  = 310;
+    const minRight = 250;
+    const totalWidth = resizeStartLeftWidth + resizeStartRightWidth;
+    const maxLeft = totalWidth - minRight;
+    let newLeft  = Math.max(minLeft, Math.min(maxLeft, resizeStartLeftWidth + dx));
+    let newRight = totalWidth - newLeft;
+    paneLeft.style.flex  = "none";
     paneRight.style.flex = "none";
-    paneLeft.style.width = newLeft + "px";
+    paneLeft.style.width  = newLeft  + "px";
     paneRight.style.width = newRight + "px";
   });
 
@@ -1790,6 +1824,19 @@
   // ── 更新日志数据 ──────────────────────────────────────────────────
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
+    {
+      version: "v0.2.0",
+      date: "2026-02-27",
+      type: "feat",
+      desc: "全屏布局重构：两侧面板贴底、笔记独立滚动",
+      items: [
+        "整体布局改为 100vh 全屏，去掉页面级别的纵向滚动条",
+        "左右两侧面板高度紧贴浏览器底部，不再产生页面溢出",
+        "左侧文本框自动撑满剩余高度，移除手动拖拽调整文本框大小",
+        "右侧笔记列表区域单独滚动，标签区域固定不动",
+        "中间拖拽分隔条限制最小宽度（左 310px / 右 250px），防止标题文字换行"
+      ]
+    },
     {
       version: "v0.1.9",
       date: "2026-02-27",
