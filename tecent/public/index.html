@@ -833,7 +833,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.2</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.3</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -916,6 +916,12 @@
 <div id="tagCtxMenu" class="ctx-menu" style="display:none;">
   <div class="ctx-menu-item" id="tagCtxFilter">🏷 筛选此标签</div>
   <div class="ctx-menu-item danger" id="tagCtxDelete">🗑 删除标签（所有笔记）</div>
+</div>
+
+<!-- 笔记卡片内 tag 右键菜单：仅从本条笔记中删除 -->
+<div id="noteTagCtxMenu" class="ctx-menu" style="display:none;">
+  <div class="ctx-menu-item" id="noteTagCtxFilter">🏷 筛选此标签</div>
+  <div class="ctx-menu-item danger" id="noteTagCtxDelete">🗑 从本条笔记中删除</div>
 </div>
 
 <div id="tagModal" class="modal-overlay" style="display:none;">
@@ -1163,19 +1169,31 @@
   }
 
   // 给 tag 绑定事件：左键筛选，右键删除
+  // tag 事件：用于左侧标签栏（右键 → 全局菜单）
   function attachTagEvents(tagElement, tag) {
-    // 左键点击：筛选切换
     tagElement.addEventListener("click", (e) => {
       if (e.button !== 0) return;
       activeTag = activeTag === tag ? null : tag;
       render();
     });
-
-    // 右键：弹出菜单（筛选 / 删除）
     tagElement.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       e.stopPropagation();
       showTagCtxMenu(e.clientX, e.clientY, tag);
+    });
+  }
+
+  // tag 事件：用于笔记卡片内（右键 → 仅从本条删除菜单）
+  function attachNoteTagEvents(tagElement, tag, noteId) {
+    tagElement.addEventListener("click", (e) => {
+      if (e.button !== 0) return;
+      activeTag = activeTag === tag ? null : tag;
+      render();
+    });
+    tagElement.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showNoteTagCtxMenu(e.clientX, e.clientY, tag, noteId);
     });
   }
 
@@ -1285,13 +1303,56 @@
 
   tagCtxDeleteEl.addEventListener("click", () => {
     if (!ctxTag) return;
-    deleteTagEverywhere(ctxTag);
+    const tag = ctxTag;
     hideTagCtxMenu();
+    if (!confirm(`从所有笔记中删除标签「${tag}」？\n此操作不可恢复。`)) return;
+    deleteTagEverywhere(tag);
   });
 
-  document.addEventListener("click", () => { hideCtxMenu(); hideTagCtxMenu(); });
+  // --- 笔记卡片内 tag 右键菜单（仅从本条笔记删除）---
+  const noteTagCtxMenu      = document.getElementById("noteTagCtxMenu");
+  const noteTagCtxFilterEl  = document.getElementById("noteTagCtxFilter");
+  const noteTagCtxDeleteEl  = document.getElementById("noteTagCtxDelete");
+  let ctxNoteTagInfo = null; // { tag, noteId }
+
+  function showNoteTagCtxMenu(x, y, tag, noteId) {
+    hideCtxMenu(); hideTagCtxMenu();
+    ctxNoteTagInfo = { tag, noteId };
+    noteTagCtxFilterEl.textContent = activeTag === tag ? "🏷 取消筛选" : "🏷 筛选此标签";
+    noteTagCtxMenu.style.display = "block";
+    const menuW = 190, menuH = 80;
+    noteTagCtxMenu.style.left = (x + menuW > window.innerWidth  ? x - menuW : x) + "px";
+    noteTagCtxMenu.style.top  = (y + menuH > window.innerHeight ? y - menuH : y) + "px";
+  }
+
+  function hideNoteTagCtxMenu() {
+    noteTagCtxMenu.style.display = "none";
+    ctxNoteTagInfo = null;
+  }
+
+  noteTagCtxFilterEl.addEventListener("click", () => {
+    if (!ctxNoteTagInfo) return;
+    activeTag = activeTag === ctxNoteTagInfo.tag ? null : ctxNoteTagInfo.tag;
+    render();
+    hideNoteTagCtxMenu();
+  });
+
+  noteTagCtxDeleteEl.addEventListener("click", () => {
+    if (!ctxNoteTagInfo) return;
+    const { tag, noteId } = ctxNoteTagInfo;
+    hideNoteTagCtxMenu();
+    if (!confirm(`从本条笔记中删除标签「${tag}」？`)) return;
+    const note = notes.find(n => n.id === noteId);
+    if (note) {
+      note.tags = note.tags.filter(t => t !== tag);
+      saveNotes();
+      render();
+    }
+  });
+
+  document.addEventListener("click", () => { hideCtxMenu(); hideTagCtxMenu(); hideNoteTagCtxMenu(); });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { hideCtxMenu(); hideTagCtxMenu(); }
+    if (e.key === "Escape") { hideCtxMenu(); hideTagCtxMenu(); hideNoteTagCtxMenu(); }
   });
 
   ctxDelete.addEventListener("click", () => {
@@ -1364,7 +1425,7 @@
           tagEl.className = "tag-chip small";
           tagEl.textContent = t;
 
-          attachTagEvents(tagEl, t);
+          attachNoteTagEvents(tagEl, t, note.id);
           tagContainer.appendChild(tagEl);
         }
         item.appendChild(tagContainer);
@@ -1508,7 +1569,7 @@
     const now = new Date();
 
     if (editingNoteId != null) {
-      // 更新已有笔记
+      // 更新已有笔记：保存后保留编辑器内容，仅退出编辑状态
       const idx = notes.findIndex(n => n.id === editingNoteId);
       if (idx !== -1) {
         notes[idx] = {
@@ -1522,7 +1583,10 @@
       }
       saveNotes();
       closeTagModal();
-      exitEditMode();
+      // 仅重置编辑状态，不清空编辑器内容
+      editingNoteId = null;
+      saveBtn.textContent = "保存日志";
+      cancelEditBtn.style.display = "none";
       render();
     } else {
       // 新建笔记
@@ -1891,6 +1955,17 @@
   // ── 更新日志数据 ──────────────────────────────────────────────────
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
+    {
+      version: "v0.2.3",
+      date: "2026-02-27",
+      type: "feat",
+      desc: "更新日志保留内容；tag 删除确认；笔记内 tag 独立删除",
+      items: [
+        "更新已有笔记后，左侧编辑区不再自动清空，方便继续修改",
+        "在标签栏右键选择「删除标签（所有笔记）」时，会先弹出确认对话框，防止误操作",
+        "笔记卡片内的 tag 右键菜单独立：选择「从本条笔记中删除」仅删除当前笔记的标签，不影响其他笔记，同样有确认提示"
+      ]
+    },
     {
       version: "v0.2.2",
       date: "2026-02-27",
