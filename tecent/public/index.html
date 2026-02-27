@@ -374,6 +374,37 @@
       text-align: center;
     }
 
+    .ctx-menu {
+      position: fixed;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.12);
+      padding: 4px 0;
+      z-index: 9999;
+      min-width: 130px;
+      user-select: none;
+    }
+
+    .ctx-menu-item {
+      padding: 9px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-main);
+      transition: background .1s;
+    }
+
+    .ctx-menu-item:hover {
+      background: var(--bg);
+    }
+
+    .ctx-menu-item.danger {
+      color: var(--danger);
+    }
+
     .filter-info {
       font-size: 13px;
       color: var(--text-sub);
@@ -555,7 +586,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.1.0</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.0</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -618,6 +649,10 @@
 </div>
 
 <!-- 标签选择弹窗 -->
+<div id="ctxMenu" class="ctx-menu" style="display:none;">
+  <div class="ctx-menu-item danger" id="ctxDelete">🗑 删除笔记</div>
+</div>
+
 <div id="tagModal" class="modal-overlay" style="display:none;">
   <div class="modal-card">
     <div>
@@ -924,6 +959,42 @@
     }
   }
 
+  // 自动生成标题：取正文第一行前5字，超出加...
+  function autoTitle(text) {
+    const firstLine = text.split("\n")[0].trim();
+    return firstLine.length <= 5 ? firstLine : firstLine.slice(0, 5) + "…";
+  }
+
+  // --- 右键菜单 ---
+  const ctxMenu   = document.getElementById("ctxMenu");
+  const ctxDelete = document.getElementById("ctxDelete");
+  let ctxNoteId   = null;
+
+  function showCtxMenu(x, y, noteId) {
+    ctxNoteId = noteId;
+    ctxMenu.style.display = "block";
+    // 防止超出视口
+    const menuW = 140, menuH = 50;
+    ctxMenu.style.left = (x + menuW > window.innerWidth  ? x - menuW : x) + "px";
+    ctxMenu.style.top  = (y + menuH > window.innerHeight ? y - menuH : y) + "px";
+  }
+
+  function hideCtxMenu() {
+    ctxMenu.style.display = "none";
+    ctxNoteId = null;
+  }
+
+  document.addEventListener("click", hideCtxMenu);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideCtxMenu(); });
+
+  ctxDelete.addEventListener("click", () => {
+    if (ctxNoteId == null) return;
+    notes = notes.filter(n => n.id !== ctxNoteId);
+    saveNotes();
+    render();
+    hideCtxMenu();
+  });
+
   function renderNotes() {
     noteListEl.innerHTML = "";
     let list = notes.slice();
@@ -948,10 +1019,16 @@
       const item = document.createElement("div");
       item.className = "note-item";
 
-      // 左上角：标题（无标题则显示日期）
+      // 右键菜单
+      item.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        showCtxMenu(e.clientX, e.clientY, note.id);
+      });
+
+      // 左上角：有标题用标题，否则从正文自动生成
       const titleEl = document.createElement("div");
       titleEl.className = "note-title";
-      titleEl.textContent = note.title || note.date;
+      titleEl.textContent = note.title || autoTitle(note.text);
 
       const body = document.createElement("div");
       body.className = "note-body";
@@ -979,12 +1056,10 @@
       const footer = document.createElement("div");
       footer.className = "note-footer";
 
-      if (note.title) {
-        const dateSpan = document.createElement("span");
-        dateSpan.className = "note-date";
-        dateSpan.textContent = note.date;
-        footer.appendChild(dateSpan);
-      }
+      const dateSpan = document.createElement("span");
+      dateSpan.className = "note-date";
+      dateSpan.textContent = note.date;
+      footer.appendChild(dateSpan);
 
       const timeSpan = document.createElement("span");
       timeSpan.className = "note-time";
