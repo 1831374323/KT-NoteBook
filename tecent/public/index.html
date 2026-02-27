@@ -232,6 +232,89 @@
       font-weight: normal;
     }
 
+    .editor-wrap {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .fmt-bar {
+      display: flex;
+      align-items: center;
+      gap: 1px;
+      padding: 0 8px;
+      max-height: 0;
+      overflow: hidden;
+      background: #f5f6ff;
+      border: 1px solid var(--border);
+      border-bottom: none;
+      border-radius: 12px 12px 0 0;
+      opacity: 0;
+      pointer-events: none;
+      transition: max-height 0.16s ease, opacity 0.14s ease, padding 0.16s ease;
+      flex-shrink: 0;
+    }
+
+    .editor-wrap.focused .fmt-bar {
+      max-height: 42px;
+      padding: 5px 8px;
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .editor-wrap.focused textarea {
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+    }
+
+    .fmt-btn {
+      background: none;
+      border: none;
+      border-radius: 6px;
+      width: 28px;
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-sub);
+      font-size: 14px;
+      font-family: inherit;
+      padding: 0;
+      transition: background 0.12s, color 0.12s;
+      flex-shrink: 0;
+    }
+
+    .fmt-btn:hover {
+      background: rgba(79, 70, 229, 0.1);
+      color: var(--primary);
+    }
+
+    .fmt-btn:active {
+      background: rgba(79, 70, 229, 0.2);
+    }
+
+    .fmt-btn.active {
+      background: rgba(79, 70, 229, 0.12);
+      color: var(--primary);
+    }
+
+    .fmt-sep {
+      width: 1px;
+      height: 16px;
+      background: var(--border);
+      margin: 0 4px;
+      flex-shrink: 0;
+    }
+
+    .fmt-label {
+      font-size: 11px;
+      color: var(--text-sub);
+      padding: 0 6px 0 4px;
+      user-select: none;
+    }
+
     textarea {
       width: 100%;
       flex: 1;
@@ -252,6 +335,10 @@
       border-color: var(--primary);
       box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.2);
     }
+
+    /* note 卡片正文中的富文本渲染 */
+    .note-body strong { font-weight: 600; color: var(--text-main); }
+    .note-body em     { font-style: italic; color: var(--text-sub); }
 
     .card-footer {
       margin-top: 8px;
@@ -913,7 +1000,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.6</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.7</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -946,7 +1033,17 @@
         <span class="sub" id="charCount">0 字</span>
       </h2>
       <input id="titleInput" type="text" placeholder="标题（可选）" maxlength="60" />
-      <textarea id="noteInput" placeholder="今天学了什么？遇到什么问题？用自己的话总结一下吧～&#10;Tips: 输入 #标签 形式的关键词，会自动成为 tag，例如：#Unity #算法 #阅读"></textarea>
+      <div class="editor-wrap" id="editorWrap">
+        <div class="fmt-bar" id="fmtBar">
+          <span class="fmt-label">格式</span>
+          <div class="fmt-sep"></div>
+          <button type="button" class="fmt-btn" data-fmt="bold"   title="加粗 (Ctrl+B)"><b>B</b></button>
+          <button type="button" class="fmt-btn" data-fmt="italic" title="斜体 (Ctrl+I)"><i>I</i></button>
+          <div class="fmt-sep"></div>
+          <button type="button" class="fmt-btn" data-fmt="code"   title="行内代码 (Ctrl+`)"><span style="font-family:monospace;font-size:12px;">`c`</span></button>
+        </div>
+        <textarea id="noteInput" placeholder="今天学了什么？遇到什么问题？用自己的话总结一下吧～&#10;Tips: 输入 #标签 形式的关键词，会自动成为 tag，例如：#Unity #算法 #阅读"></textarea>
+      </div>
       <div class="card-footer">
         <div class="hint">
           自动提取标签规则：
@@ -1119,6 +1216,56 @@
   })();
 
   // --- 工具函数 ---
+
+  /**
+   * 将存储的轻量 Markdown 渲染为安全 HTML（仅支持 **bold** / _italic_ / `code`）。
+   * 先转义 HTML 实体，再替换格式标记，最后把换行转为 <br>。
+   */
+  function renderMarkdown(raw) {
+    if (!raw) return "";
+    return raw
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/`([^`]+)`/g,     "<code>$1</code>")
+      .replace(/_([^_\n]+)_/g,   "<em>$1</em>")
+      .replace(/\n/g, "<br>");
+  }
+
+  /**
+   * 在 textarea 中对选区应用/撤销指定格式标记。
+   * 若无选区则插入空标记并把光标放中间。
+   */
+  function applyFormat(type) {
+    const ta = noteInput;
+    const s  = ta.selectionStart;
+    const e  = ta.selectionEnd;
+    const v  = ta.value;
+    const sel = v.slice(s, e);
+    const markers = { bold: "**", italic: "_", code: "`" };
+    const m = markers[type];
+    if (!m) return;
+
+    let newVal, newS, newE;
+    if (sel.startsWith(m) && sel.endsWith(m) && sel.length >= m.length * 2 + 1) {
+      // 已包裹 → 去除标记
+      const inner = sel.slice(m.length, -m.length);
+      newVal = v.slice(0, s) + inner + v.slice(e);
+      newS = s; newE = s + inner.length;
+    } else if (s === e) {
+      // 无选区 → 插入空标记，光标放中间
+      newVal = v.slice(0, s) + m + m + v.slice(s);
+      newS = newE = s + m.length;
+    } else {
+      // 包裹选区
+      newVal = v.slice(0, s) + m + sel + m + v.slice(e);
+      newS = s; newE = e + m.length * 2;
+    }
+    ta.value = newVal;
+    ta.setSelectionRange(newS, newE);
+    ta.dispatchEvent(new Event("input"));
+    ta.focus();
+  }
+
   function getTodayStr() {
     const d = new Date();
     const y = d.getFullYear();
@@ -1247,6 +1394,24 @@
   const titleInput    = document.getElementById("titleInput");
   const saveBtn       = document.getElementById("saveBtn");
   const cancelEditBtn = document.getElementById("cancelEditBtn");
+
+  // --- 格式化工具栏 ---
+  const editorWrap = document.getElementById("editorWrap");
+  const fmtBar     = document.getElementById("fmtBar");
+
+  noteInput.addEventListener("focus", () => editorWrap.classList.add("focused"));
+  noteInput.addEventListener("blur", (e) => {
+    // 点击格式条按钮时 relatedTarget 是 fmt-btn，此时不收起工具栏
+    if (fmtBar && fmtBar.contains(e.relatedTarget)) return;
+    editorWrap.classList.remove("focused");
+  });
+
+  fmtBar.querySelectorAll(".fmt-btn").forEach(btn => {
+    btn.addEventListener("mousedown", (e) => {
+      e.preventDefault(); // 阻止 textarea 失焦
+      applyFormat(btn.dataset.fmt);
+    });
+  });
 
   // --- 编辑状态 ---
   let editingNoteId = null;
@@ -1561,9 +1726,10 @@
       body.className = "note-body";
       // 最多显示 5 行：超出时保留前 4 行，第 5 行显示省略号
       const bodyLines = (note.text || "").split("\n");
-      body.textContent = bodyLines.length > 5
+      const displayText = bodyLines.length > 5
         ? bodyLines.slice(0, 4).join("\n") + "\n…"
-        : note.text;
+        : (note.text || "");
+      body.innerHTML = renderMarkdown(displayText);
 
       item.appendChild(titleEl);
       item.appendChild(body);
@@ -1870,6 +2036,13 @@
     const end   = ta.selectionEnd;
     const val   = ta.value;
 
+    // Ctrl/Cmd 格式快捷键
+    if (e.ctrlKey || e.metaKey) {
+      if (e.key === "b") { e.preventDefault(); applyFormat("bold");   return; }
+      if (e.key === "i") { e.preventDefault(); applyFormat("italic"); return; }
+      if (e.key === "`") { e.preventDefault(); applyFormat("code");   return; }
+    }
+
     // Shift+Tab：升一级
     if (e.key === "Tab" && e.shiftKey) {
       e.preventDefault();
@@ -2120,6 +2293,19 @@
   // ── 更新日志数据 ──────────────────────────────────────────────────
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
+    {
+      version: "v0.2.7",
+      date: "2026-02-27",
+      type: "feat",
+      desc: "文本格式化工具栏（加粗 / 斜体 / 行内代码）",
+      items: [
+        "编辑器聚焦时，文本框顶部出现格式化工具栏，内含加粗（B）、斜体（I）、行内代码（`c`）按钮",
+        "选中文字后点击按钮可包裹/取消对应格式标记（**加粗** / _斜体_ / `代码`）",
+        "支持键盘快捷键：Ctrl+B 加粗、Ctrl+I 斜体、Ctrl+` 行内代码",
+        "再次点击相同格式按钮可撤销已包裹的标记",
+        "笔记卡片列表中可预览渲染后的粗体、斜体效果"
+      ]
+    },
     {
       version: "v0.2.6",
       date: "2026-02-27",
