@@ -1025,6 +1025,146 @@
     .cl-tag.feat  { background: #ede9fe; color: #7c3aed; }
     .cl-tag.fix   { background: #fef3c7; color: #b45309; }
     .cl-tag.infra { background: #ecfdf5; color: #065f46; }
+
+    /* ── 回收站 ── */
+    .trash-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12.5px;
+      color: var(--text-sub);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 2px 8px;
+      cursor: pointer;
+      line-height: 1.6;
+      transition: background 0.13s, color 0.13s, border-color 0.13s;
+    }
+    .trash-btn:hover {
+      background: var(--bg);
+      color: var(--text-main);
+      border-color: #c4c4c8;
+    }
+    .trash-badge {
+      background: var(--danger);
+      color: #fff;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 0 5px;
+      min-width: 16px;
+      height: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
+
+    .trash-drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      height: 100vh;
+      width: 400px;
+      max-width: 95vw;
+      background: #fff;
+      box-shadow: -8px 0 40px rgba(15, 23, 42, 0.14);
+      z-index: 1100;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(100%);
+      transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .trash-drawer.open { transform: translateX(0); }
+
+    .trash-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 22px 14px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .trash-header h2 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .trash-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .trash-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .trash-empty {
+      text-align: center;
+      color: var(--text-sub);
+      font-size: 14px;
+      padding: 48px 0 32px;
+    }
+    .trash-item {
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 11px 14px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      transition: border-color 0.15s;
+    }
+    .trash-item:hover { border-color: #c4c4c8; }
+    .trash-item-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text-main);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .trash-item-body {
+      font-size: 12.5px;
+      color: var(--text-sub);
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .trash-item-meta {
+      font-size: 11.5px;
+      color: var(--text-sub);
+      opacity: 0.75;
+    }
+    .trash-item-actions {
+      display: flex;
+      gap: 7px;
+      margin-top: 4px;
+    }
+    .btn-perm-delete {
+      background: transparent;
+      border: 1px solid #fca5a5;
+      color: var(--danger);
+      font-size: 12px;
+      padding: 3px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.13s, border-color 0.13s;
+    }
+    .btn-perm-delete:hover { background: #fff1f1; border-color: var(--danger); }
   </style>
   <!-- 腾讯云开发 Web SDK -->
   <!-- 需 2.24+ 才支持 signInWithPassword / signInAnonymously 等新认证 API -->
@@ -1036,7 +1176,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.9</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.10</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -1048,6 +1188,21 @@
       <button id="changelogBtn" class="changelog-btn" title="版本更新记录">📋 更新记录</button>
     </div>
   </header>
+
+  <!-- 回收站遮罩 -->
+  <div id="trashBackdrop" class="changelog-backdrop"></div>
+
+  <!-- 回收站抽屉 -->
+  <div id="trashDrawer" class="trash-drawer">
+    <div class="trash-header">
+      <h2>🗑 回收站</h2>
+      <div class="trash-header-actions">
+        <button id="emptyTrashBtn" class="outline small" style="font-size:12px;color:var(--danger);border-color:#fca5a5;">清空回收站</button>
+        <button class="changelog-close" id="trashClose" title="关闭">✕</button>
+      </div>
+    </div>
+    <div class="trash-body" id="trashBody"></div>
+  </div>
 
   <!-- 更新日志抽屉遮罩 -->
   <div id="changelogBackdrop" class="changelog-backdrop"></div>
@@ -1114,7 +1269,10 @@
       <div class="section">
         <div class="section-title">
           <span>笔记列表</span>
-          <span class="danger-link" id="clearAllBtn">清空所有数据</span>
+          <button class="trash-btn" id="trashBtn" title="查看回收站">
+            🗑 回收站
+            <span class="trash-badge" id="trashBadge" style="display:none">0</span>
+          </button>
         </div>
         <div class="note-list" id="noteList"></div>
       </div>
@@ -1209,13 +1367,15 @@
 
   /** @type {Note[]} */
   let notes = [];
+  /** 回收站：已软删除的笔记（含 trashedAt 时间戳） */
+  let trash = [];
   /** 全局标签注册表：独立于 notes，删除某条笔记的 tag 时不会从此处移除 */
   let tagList = new Set();
   let activeTag = null;
 
-  /** 将当前 notes + tagList 序列化为 JSON 字符串 */
+  /** 将当前 notes + tagList + trash 序列化为 JSON 字符串 */
   function serializeData() {
-    return JSON.stringify({ notes, tags: [...tagList] });
+    return JSON.stringify({ notes, tags: [...tagList], trash });
   }
 
   // --- 统一确认弹窗 ---
@@ -1582,19 +1742,21 @@
   function loadNotesFromLocal() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) { notes = []; tagList = new Set(); return; }
+      if (!raw) { notes = []; trash = []; tagList = new Set(); return; }
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         // 旧格式（仅 notes 数组），从 notes 中推导 tagList
         notes = parsed;
+        trash = [];
         tagList = new Set(notes.flatMap(n => n.tags || []));
       } else {
         notes   = Array.isArray(parsed.notes) ? parsed.notes : [];
+        trash   = Array.isArray(parsed.trash) ? parsed.trash : [];
         tagList = new Set(Array.isArray(parsed.tags) ? parsed.tags : []);
         // 确保 notes 里的 tag 也全部收录（防止旧数据缺失）
         for (const n of notes) for (const t of (n.tags || [])) tagList.add(t);
       }
-    } catch (e) { notes = []; tagList = new Set(); }
+    } catch (e) { notes = []; trash = []; tagList = new Set(); }
   }
 
   /**
@@ -1758,6 +1920,7 @@
     renderSummary();
     renderTags();
     renderNotes();
+    updateTrashBadge();
   }
 
   function renderSummary() {
@@ -1930,16 +2093,14 @@
     if (ctxNoteId == null) return;
     const id = ctxNoteId;
     hideCtxMenu();
-    showConfirm(
-      "确定要删除这条笔记吗？\n此操作不可恢复。",
-      () => {
-        notes = notes.filter(n => n.id !== id);
-        if (id === editingNoteId) exitEditMode();
-        saveNotes();
-        render();
-      },
-      { okText: "删除笔记", icon: "🗑️" }
-    );
+    const note = notes.find(n => n.id === id);
+    if (!note) return;
+    // 移入回收站（可恢复），无需确认
+    notes = notes.filter(n => n.id !== id);
+    trash.push({ ...note, trashedAt: Date.now() });
+    if (id === editingNoteId) exitEditMode();
+    saveNotes();
+    render();
   });
 
   function renderNotes() {
@@ -2397,17 +2558,121 @@
     dateInput.value = getTodayStr();
   });
 
-  clearAllBtn.addEventListener("click", () => {
-    if (notes.length === 0) return;
+  // ── 回收站 ────────────────────────────────────────────────────────
+
+  function updateTrashBadge() {
+    const badge = document.getElementById("trashBadge");
+    if (!badge) return;
+    if (trash.length > 0) {
+      badge.textContent = trash.length > 99 ? "99+" : String(trash.length);
+      badge.style.display = "";
+    } else {
+      badge.style.display = "none";
+    }
+  }
+
+  function renderTrash() {
+    const body = document.getElementById("trashBody");
+    body.innerHTML = "";
+    if (trash.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "trash-empty";
+      empty.innerHTML = "🗑<br><br>回收站是空的";
+      body.appendChild(empty);
+      return;
+    }
+    const sorted = [...trash].sort((a, b) => (b.trashedAt || 0) - (a.trashedAt || 0));
+    for (const note of sorted) {
+      const item = document.createElement("div");
+      item.className = "trash-item";
+
+      const titleEl = document.createElement("div");
+      titleEl.className = "trash-item-title";
+      titleEl.textContent = note.title || autoTitle(note.text);
+
+      const bodyEl = document.createElement("div");
+      bodyEl.className = "trash-item-body";
+      bodyEl.textContent = noteToPlain(note.text || "").replace(/\n+/g, " ").slice(0, 100);
+
+      const meta = document.createElement("div");
+      meta.className = "trash-item-meta";
+      const trashedStr = note.trashedAt
+        ? new Date(note.trashedAt).toLocaleString([], { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+        : "—";
+      meta.textContent = "创建于 " + note.date + " · 删除于 " + trashedStr;
+
+      const actions = document.createElement("div");
+      actions.className = "trash-item-actions";
+
+      const restoreBtn = document.createElement("button");
+      restoreBtn.className = "outline small";
+      restoreBtn.style.fontSize = "12px";
+      restoreBtn.textContent = "↩ 恢复";
+      restoreBtn.addEventListener("click", () => restoreFromTrash(note.id));
+
+      const delBtn = document.createElement("button");
+      delBtn.className = "btn-perm-delete";
+      delBtn.textContent = "彻底删除";
+      delBtn.addEventListener("click", () => {
+        showConfirm(
+          "彻底删除「" + (note.title || autoTitle(note.text)) + "」？\n此操作不可恢复。",
+          () => { permanentDelete(note.id); },
+          { okText: "彻底删除", icon: "🗑️" }
+        );
+      });
+
+      actions.appendChild(restoreBtn);
+      actions.appendChild(delBtn);
+      item.append(titleEl, bodyEl, meta, actions);
+      body.appendChild(item);
+    }
+  }
+
+  function restoreFromTrash(id) {
+    const note = trash.find(n => n.id === id);
+    if (!note) return;
+    trash = trash.filter(n => n.id !== id);
+    const { trashedAt, ...restored } = note;
+    notes.push(restored);
+    saveNotes();
+    render();
+    renderTrash();
+  }
+
+  function permanentDelete(id) {
+    trash = trash.filter(n => n.id !== id);
+    saveNotes();
+    renderTrash();
+    updateTrashBadge();
+  }
+
+  function openTrash() {
+    renderTrash();
+    document.getElementById("trashDrawer").classList.add("open");
+    document.getElementById("trashBackdrop").classList.add("open");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeTrash() {
+    document.getElementById("trashDrawer").classList.remove("open");
+    document.getElementById("trashBackdrop").classList.remove("open");
+    document.body.style.overflow = "";
+  }
+
+  document.getElementById("trashBtn").addEventListener("click", openTrash);
+  document.getElementById("trashClose").addEventListener("click", closeTrash);
+  document.getElementById("trashBackdrop").addEventListener("click", closeTrash);
+  document.getElementById("emptyTrashBtn").addEventListener("click", () => {
+    if (trash.length === 0) return;
     showConfirm(
-      "确定要清空所有笔记吗？\n此操作不可恢复，所有数据将被永久删除。",
+      "彻底删除回收站中的全部 " + trash.length + " 条笔记？\n此操作不可恢复。",
       () => {
-        notes = [];
+        trash = [];
         saveNotes();
-        activeTag = null;
-        render();
+        renderTrash();
+        updateTrashBadge();
       },
-      { okText: "清空全部", icon: "⚠️" }
+      { okText: "清空回收站", icon: "⚠️" }
     );
   });
 
@@ -2494,7 +2759,8 @@
 
     // 从云存储读取笔记，与本地合并后再写回（避免直接覆盖导致多端丢数据）
     loadNotesFromLocal();
-    const localBeforeMerge  = notes.length  ? notes.slice()   : [];
+    const localBeforeMerge     = notes.length ? notes.slice() : [];
+    const localTrashBeforeMerge = trash.length ? trash.slice() : [];
     const localTagsBeforeMerge = new Set(tagList);
 
     // 优先使用上次上传时 SDK 返回并持久化的真实 fileID，否则用硬编码的兜底值
@@ -2519,10 +2785,13 @@
           // 兼容旧格式（纯数组）与新格式（{ notes, tags }）
           const cloudNotes = Array.isArray(data) ? data : (Array.isArray(data.notes) ? data.notes : []);
           const cloudTags  = Array.isArray(data) ? [] : (Array.isArray(data.tags)  ? data.tags  : []);
-          console.log(`[Storage] 云端 notebook.json 读取成功，条目数：${cloudNotes.length}，标签数：${cloudTags.length}`);
+          const cloudTrash = Array.isArray(data.trash) ? data.trash : [];
+          console.log(`[Storage] 云端 notebook.json 读取成功，条目数：${cloudNotes.length}，标签数：${cloudTags.length}，回收站：${cloudTrash.length}`);
 
           // 合并 notes
           notes = mergeNotes(cloudNotes, localBeforeMerge);
+          // 合并 trash（同样按 id 去重）
+          trash = mergeNotes(cloudTrash, localTrashBeforeMerge);
           // 合并 tagList：云端 + 本地的并集，再确保所有 note tag 都收录
           tagList = new Set([...cloudTags, ...localTagsBeforeMerge]);
           for (const n of notes) for (const t of (n.tags || [])) tagList.add(t);
@@ -2531,8 +2800,8 @@
           localStorage.setItem(STORAGE_KEY, serializeData());
           setSyncBadge("online");
           // 若合并结果与云端不一致，上传合并后的完整数据，保证云上也是最新合并版
-          const cloudPayloadStr  = JSON.stringify({ notes: cloudNotes, tags: cloudTags.sort() });
-          const mergedPayloadStr = JSON.stringify({ notes, tags: [...tagList].sort() });
+          const cloudPayloadStr  = JSON.stringify({ notes: cloudNotes, tags: cloudTags.sort(), trash: cloudTrash });
+          const mergedPayloadStr = JSON.stringify({ notes, tags: [...tagList].sort(), trash });
           if (cloudPayloadStr !== mergedPayloadStr) {
             console.log("[Storage] 云端与本地有差异，回写合并结果到云存储…");
             try {
@@ -2564,6 +2833,19 @@
   // ── 更新日志数据 ──────────────────────────────────────────────────
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
+    {
+      version: "v0.2.10",
+      date: "2026-02-28",
+      type: "feat",
+      desc: "回收站：删除笔记可恢复",
+      items: [
+        "右键删除笔记不再直接清除数据，而是移入回收站（无需确认弹窗，操作更流畅）",
+        "点击「🗑 回收站」按钮打开侧边抽屉，查看所有已删除的笔记",
+        "回收站内可一键恢复笔记到列表，或彻底删除（需确认）",
+        "支持清空回收站（需确认），云端多端同步回收站数据",
+        "移除「清空所有数据」危险按钮"
+      ]
+    },
     {
       version: "v0.2.9",
       date: "2026-02-27",
@@ -2867,7 +3149,9 @@
   document.getElementById("changelogBtn").addEventListener("click", openChangelog);
   document.getElementById("changelogClose").addEventListener("click", closeChangelog);
   document.getElementById("changelogBackdrop").addEventListener("click", closeChangelog);
-  document.addEventListener("keydown", e => { if (e.key === "Escape") closeChangelog(); });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape") { closeChangelog(); closeTrash(); }
+  });
 
   init();
 </script>
