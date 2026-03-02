@@ -1176,7 +1176,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.10</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.12</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -1226,6 +1226,8 @@
       <input id="titleInput" type="text" placeholder="标题（可选）" maxlength="60" />
       <div class="editor-wrap" id="editorWrap">
         <div class="fmt-bar" id="fmtBar">
+          <button type="button" class="fmt-btn" id="undoBtn" title="撤回 (Ctrl+Z)" disabled style="opacity:0.35;">↩</button>
+          <div class="fmt-sep"></div>
           <span class="fmt-label">格式</span>
           <div class="fmt-sep"></div>
           <button type="button" class="fmt-btn" data-fmt="bold"   title="加粗 (Ctrl+B)"><b>B</b></button>
@@ -1659,6 +1661,7 @@
   /** 对选区应用格式（bold/italic/code） */
   function applyFormat(type) {
     noteInput.focus();
+    if (typeof pushSnapshotNow === "function") pushSnapshotNow();
     if (type === "bold")   { document.execCommand("bold",   false, null); }
     else if (type === "italic") { document.execCommand("italic", false, null); }
     else if (type === "code") {
@@ -1831,15 +1834,95 @@
     editorWrap.classList.remove("focused");
   });
 
-  fmtBar.querySelectorAll(".fmt-btn").forEach(btn => {
+  fmtBar.querySelectorAll(".fmt-btn[data-fmt]").forEach(btn => {
     btn.addEventListener("mousedown", (e) => {
       e.preventDefault(); // 阻止 textarea 失焦
       applyFormat(btn.dataset.fmt);
     });
   });
 
+  // ── 自定义 Undo 历史栈 ──────────────────────────────────────────
+  const UNDO_MAX = 200;
+  let undoStack   = [];   // [{ html, selStart, selEnd }, ...]
+  let undoPointer = -1;   // 指向当前状态
+  let undoPushTimer = null;
+  let undoApplying  = false; // 正在还原时屏蔽 input 触发
+
+  const undoBtn = document.getElementById("undoBtn");
+
+  function updateUndoBtn() {
+    const canUndo = undoPointer > 0;
+    undoBtn.disabled = !canUndo;
+    undoBtn.style.opacity = canUndo ? "1" : "0.35";
+  }
+
+  /** 将当前编辑器状态压入历史栈 */
+  function pushUndoSnapshot() {
+    if (undoApplying) return;
+    const html = noteInput.innerHTML;
+    // 与栈顶相同则不重复压入
+    if (undoPointer >= 0 && undoStack[undoPointer].html === html) return;
+    // 截断重做分支
+    undoStack = undoStack.slice(0, undoPointer + 1);
+    undoStack.push({ html, sel: getCESelStart() });
+    if (undoStack.length > UNDO_MAX) undoStack.shift();
+    undoPointer = undoStack.length - 1;
+    updateUndoBtn();
+  }
+
+  /** 防抖：输入时每 400ms 或操作间隔触发一次快照 */
+  function schedulePushSnapshot() {
+    clearTimeout(undoPushTimer);
+    undoPushTimer = setTimeout(pushUndoSnapshot, 400);
+  }
+
+  /** 立即压入快照（格式操作等明确的状态改变时调用） */
+  function pushSnapshotNow() {
+    clearTimeout(undoPushTimer);
+    pushUndoSnapshot();
+  }
+
+  /** 执行撤回 */
+  function performUndo() {
+    if (undoPointer <= 0) return;
+    // 先确保当前状态已入栈
+    if (undoPushTimer) { clearTimeout(undoPushTimer); pushUndoSnapshot(); }
+    undoPointer--;
+    const snap = undoStack[undoPointer];
+    undoApplying = true;
+    noteInput.innerHTML = snap.html;
+    // 恢复光标到快照位置
+    try { setCESelection(snap.sel, snap.sel); } catch(_) {}
+    noteInput.dispatchEvent(new Event("input"));
+    undoApplying = false;
+    updateUndoBtn();
+  }
+
+  // 编辑器 input 时安排快照
+  noteInput.addEventListener("input", schedulePushSnapshot);
+
+  // 编辑器首次获焦时压入初始快照
+  noteInput.addEventListener("focus", () => {
+    if (undoPointer === -1) pushUndoSnapshot();
+  }, { once: false });
+
+  // 撤回按钮点击
+  undoBtn.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    performUndo();
+  });
+
+  // ─────────────────────────────────────────────────────────────────
+
   // --- 编辑状态 ---
   let editingNoteId = null;
+
+  function resetUndoStack() {
+    clearTimeout(undoPushTimer);
+    undoStack   = [];
+    undoPointer = -1;
+    if (undoBtn) { undoBtn.disabled = true; undoBtn.style.opacity = "0.35"; }
+  }
 
   function enterEditMode(note) {
     editingNoteId = note.id;
@@ -1849,6 +1932,7 @@
     charCount.textContent = `${getEditorText().length} 字`;
     saveBtn.textContent = "更新日志";
     cancelEditBtn.style.display = "";
+    resetUndoStack();
     // 滚到编辑区
     document.getElementById("paneLeft").scrollIntoView({ behavior: "smooth", block: "start" });
     titleInput.focus();
@@ -1863,6 +1947,7 @@
     charCount.textContent = "0 字";
     saveBtn.textContent = "保存日志";
     cancelEditBtn.style.display = "none";
+    resetUndoStack();
     renderNotes();
   }
 
@@ -2467,11 +2552,12 @@
     const end   = ta.selectionEnd;
     const val   = ta.value;
 
-    // Ctrl/Cmd 格式快捷键
+    // Ctrl/Cmd 快捷键
     if (e.ctrlKey || e.metaKey) {
-      if (e.key === "b") { e.preventDefault(); applyFormat("bold");   return; }
-      if (e.key === "i") { e.preventDefault(); applyFormat("italic"); return; }
-      if (e.key === "`") { e.preventDefault(); applyFormat("code");   return; }
+      if (e.key === "z" && !e.shiftKey) { e.preventDefault(); performUndo(); return; }
+      if (e.key === "b") { e.preventDefault(); pushSnapshotNow(); applyFormat("bold");   return; }
+      if (e.key === "i") { e.preventDefault(); pushSnapshotNow(); applyFormat("italic"); return; }
+      if (e.key === "`") { e.preventDefault(); pushSnapshotNow(); applyFormat("code");   return; }
     }
 
     // Shift+Tab：升一级
@@ -2837,6 +2923,19 @@
   // ── 更新日志数据 ──────────────────────────────────────────────────
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
+    {
+      version: "v0.2.12",
+      date: "2026-03-02",
+      type: "feat",
+      desc: "编辑器新增撤回功能",
+      items: [
+        "格式栏最左边新增「↩」撤回按钮，点击可撤回上一步编辑操作",
+        "支持键盘快捷键 Ctrl+Z（Mac 上 Cmd+Z）触发撤回，完全替代浏览器原生撤回行为",
+        "撤回历史最多保留 200 步，输入间隔 400ms 自动记录快照",
+        "加粗、斜体、行内代码等格式操作也会单独记录为一个可撤回步骤",
+        "切换或退出笔记编辑时自动清空撤回历史，避免跨笔记误撤"
+      ]
+    },
     {
       version: "v0.2.11",
       date: "2026-03-02",
