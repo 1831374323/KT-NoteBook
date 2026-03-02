@@ -32,6 +32,15 @@ alwaysApply: true
 
 ---
 
+# Git Push 规则
+
+**只有用户明确提到"push"时，才执行 `git push`。**
+
+- 默认情况下，完成 commit 后**不自动 push**
+- 用户说"push"、"推送"、"写完push"等明确指令时，才执行 push
+
+---
+
 # Git Commit 格式规范
 
 每次提交必须遵守以下格式：
