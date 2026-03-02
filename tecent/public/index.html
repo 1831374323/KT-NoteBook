@@ -1352,6 +1352,7 @@
   const CLOUD_PATH     = "notes/notebook.json";
   const STORAGE_KEY    = "study_notes_v1";
   const FILE_ID_KEY    = "cloud_file_id_v1";
+  const SYNC_FAIL_KEY  = "cloud_sync_failed_v1"; // 上次上传是否失败
   // 兜底 fileID：bucket 名称从控制台云存储列表确认为 6b74-kt-notebook-5gzea6as40f0fb41-1313442109
   const CLOUD_FILE_ID_DEFAULT = "cloud://kt-notebook-5gzea6as40f0fb41.6b74-kt-notebook-5gzea6as40f0fb41-1313442109/notes/notebook.json";
 
@@ -1727,14 +1728,15 @@
       const blob = new Blob([serializeData()], { type: "application/json" });
       const file = new File([blob], "notebook.json", { type: "application/json" });
       const uploadRes = await tcbApp.uploadFile({ cloudPath: CLOUD_PATH, filePath: file });
-      // 持久化 SDK 返回的真实 fileID，避免手动拼接 bucket 名出错
       if (uploadRes?.fileID) {
         localStorage.setItem(FILE_ID_KEY, uploadRes.fileID);
         console.log("[Storage] 上传成功，fileID:", uploadRes.fileID);
       }
+      localStorage.removeItem(SYNC_FAIL_KEY); // 上传成功：清除失败标记
       setSyncBadge("online");
     } catch (err) {
       console.error("[Storage] 云存储写入失败：", err);
+      localStorage.setItem(SYNC_FAIL_KEY, "1"); // 记录失败，下次加载时合并本地数据
       setSyncBadge("error");
     }
   }
@@ -2757,74 +2759,76 @@
       return;
     }
 
-    // 从云存储读取笔记，与本地合并后再写回（避免直接覆盖导致多端丢数据）
-    loadNotesFromLocal();
-    const localBeforeMerge     = notes.length ? notes.slice() : [];
-    const localTrashBeforeMerge = trash.length ? trash.slice() : [];
-    const localTagsBeforeMerge = new Set(tagList);
+    // 上次同步失败时，先加载本地数据以便后续合并；否则直接用云端数据覆盖
+    const lastSyncFailed = localStorage.getItem(SYNC_FAIL_KEY) === "1";
+    if (lastSyncFailed) {
+      loadNotesFromLocal();
+      console.log(`[Storage] 上次同步失败，已加载本地备份（${notes.length} 条），将与云端合并`);
+    }
 
     // 优先使用上次上传时 SDK 返回并持久化的真实 fileID，否则用硬编码的兜底值
     const savedFileId = localStorage.getItem(FILE_ID_KEY) || CLOUD_FILE_ID_DEFAULT;
     console.log("[Storage] 使用 fileID:", savedFileId,
-      localStorage.getItem(FILE_ID_KEY) ? "(来自缓存)" : "(来自默认值，清除存储后首次加载)");
+      localStorage.getItem(FILE_ID_KEY) ? "(来自缓存)" : "(来自默认值)");
 
     try {
-      // fileList 必须是字符串数组（fileID），不能是对象——官方 JS SDK 文档规范
-      const res = await tcbApp.getTempFileURL({
-        fileList: [savedFileId]
-      });
+      const res = await tcbApp.getTempFileURL({ fileList: [savedFileId] });
       const item = res.fileList[0];
       if (item.code === "SUCCESS" && item.tempFileURL) {
-        // 临时链接获取成功，将当前使用的 fileID 写入缓存（兜底默认值也一并持久化）
         localStorage.setItem(FILE_ID_KEY, savedFileId);
-        // 拼接时间戳破坏 CDN 缓存，保证读到的是最新上传的文件
         const freshUrl = item.tempFileURL + (item.tempFileURL.includes("?") ? "&" : "?") + "_t=" + Date.now();
         const resp = await fetch(freshUrl, { cache: "no-store" });
         if (resp.ok) {
           const data = await resp.json();
-          // 兼容旧格式（纯数组）与新格式（{ notes, tags }）
           const cloudNotes = Array.isArray(data) ? data : (Array.isArray(data.notes) ? data.notes : []);
           const cloudTags  = Array.isArray(data) ? [] : (Array.isArray(data.tags)  ? data.tags  : []);
           const cloudTrash = Array.isArray(data.trash) ? data.trash : [];
-          console.log(`[Storage] 云端 notebook.json 读取成功，条目数：${cloudNotes.length}，标签数：${cloudTags.length}，回收站：${cloudTrash.length}`);
+          console.log(`[Storage] 云端读取成功：${cloudNotes.length} 条，标签 ${cloudTags.length}，回收站 ${cloudTrash.length}`);
 
-          // 合并 notes
-          notes = mergeNotes(cloudNotes, localBeforeMerge);
-          // 合并 trash（同样按 id 去重）
-          trash = mergeNotes(cloudTrash, localTrashBeforeMerge);
-          // 合并 tagList：云端 + 本地的并集，再确保所有 note tag 都收录
-          tagList = new Set([...cloudTags, ...localTagsBeforeMerge]);
-          for (const n of notes) for (const t of (n.tags || [])) tagList.add(t);
-
-          console.log(`[Storage] 合并后条目数：${notes.length}（本地 ${localBeforeMerge.length} + 云端 ${cloudNotes.length}），标签数：${tagList.size}`);
-          localStorage.setItem(STORAGE_KEY, serializeData());
-          setSyncBadge("online");
-          // 若合并结果与云端不一致，上传合并后的完整数据，保证云上也是最新合并版
-          const cloudPayloadStr  = JSON.stringify({ notes: cloudNotes, tags: cloudTags.sort(), trash: cloudTrash });
-          const mergedPayloadStr = JSON.stringify({ notes, tags: [...tagList].sort(), trash });
-          if (cloudPayloadStr !== mergedPayloadStr) {
-            console.log("[Storage] 云端与本地有差异，回写合并结果到云存储…");
+          if (lastSyncFailed) {
+            // 上次同步失败：合并本地未上传的改动与云端数据
+            const localNotes = notes.slice();
+            const localTrash = trash.slice();
+            const localTags  = new Set(tagList);
+            notes   = mergeNotes(cloudNotes, localNotes);
+            trash   = mergeNotes(cloudTrash, localTrash);
+            tagList = new Set([...cloudTags, ...localTags]);
+            for (const n of notes) for (const t of (n.tags || [])) tagList.add(t);
+            console.log(`[Storage] 合并完成：${notes.length} 条（本地 ${localNotes.length} + 云端 ${cloudNotes.length}）`);
+            // 将合并结果写回云端，并清除失败标记
             try {
               const blob = new Blob([serializeData()], { type: "application/json" });
               const file = new File([blob], "notebook.json", { type: "application/json" });
               const uploadRes = await tcbApp.uploadFile({ cloudPath: CLOUD_PATH, filePath: file });
               if (uploadRes?.fileID) localStorage.setItem(FILE_ID_KEY, uploadRes.fileID);
-              console.log("[Storage] 回写完成");
-            } catch (e) { console.warn("[Storage] 合并后回写云存储失败：", e); }
+              localStorage.removeItem(SYNC_FAIL_KEY);
+              console.log("[Storage] 合并结果已回写云端");
+            } catch (e) { console.warn("[Storage] 合并后回写云端失败，保留失败标记：", e); }
+          } else {
+            // 正常情况：直接用云端数据覆盖本地
+            notes   = cloudNotes;
+            trash   = cloudTrash;
+            tagList = new Set(cloudTags);
+            for (const n of notes) for (const t of (n.tags || [])) tagList.add(t);
+            console.log("[Storage] 已用云端数据覆盖本地");
           }
+          localStorage.setItem(STORAGE_KEY, serializeData());
+          setSyncBadge("online");
         } else {
           console.warn("[Storage] 云端文件请求失败，HTTP:", resp.status);
+          if (!lastSyncFailed) loadNotesFromLocal();
         }
       } else if (item.code === "STORAGE_FILE_NONEXIST") {
-        // 文件在云端确实不存在（真正首次 / 文件被手动删除），仅使用本地数据，不覆盖云端
-        // 待用户保存笔记时会触发 uploadFile 自动创建文件
-        console.log("[Storage] 云端文件不存在，使用本地数据（保存笔记后将自动创建云端文件）");
+        console.log("[Storage] 云端文件不存在，使用本地数据");
+        if (!lastSyncFailed) loadNotesFromLocal();
         setSyncBadge("offline");
       } else {
         console.warn("[Storage] 获取临时链接失败：", item);
+        if (!lastSyncFailed) loadNotesFromLocal();
       }
     } catch (err) {
       console.warn("[Storage] 云存储读取失败，使用本地数据：", err);
+      if (!lastSyncFailed) loadNotesFromLocal();
       setSyncBadge("offline");
     }
     render();
@@ -2833,6 +2837,18 @@
   // ── 更新日志数据 ──────────────────────────────────────────────────
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
+    {
+      version: "v0.1.7",
+      date: "2026-02-26",
+      type: "fix",
+      desc: "同步策略优化：仅失败时合并，正常情况直接用云端覆盖",
+      items: [
+        "保存成功时云端数据直接作为权威来源，本地跟随云端",
+        "保存失败时自动记录失败状态，下次启动时将本地未同步的改动与云端合并后回写",
+        "合并成功后自动清除失败标记，恢复正常覆盖策略",
+        "避免多次打开应用时本地旧数据反复影响云端"
+      ]
+    },
     {
       version: "v0.2.10",
       date: "2026-02-28",
@@ -2998,7 +3014,7 @@
       ]
     },
     {
-      version: "v0.1.6",
+      version: "v0.1.7",
       date: "2026-02-27",
       type: "fix",
       desc: "修复全局编号重新编排与层级续编",
