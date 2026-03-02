@@ -1176,7 +1176,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.12</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.13</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -1227,6 +1227,7 @@
       <div class="editor-wrap" id="editorWrap">
         <div class="fmt-bar" id="fmtBar">
           <button type="button" class="fmt-btn" id="undoBtn" title="撤回 (Ctrl+Z)" disabled style="opacity:0.35;">↩</button>
+          <button type="button" class="fmt-btn" id="redoBtn" title="重做 (Ctrl+Shift+Z)" disabled style="opacity:0.35;">↪</button>
           <div class="fmt-sep"></div>
           <span class="fmt-label">格式</span>
           <div class="fmt-sep"></div>
@@ -1849,11 +1850,15 @@
   let undoApplying  = false; // 正在还原时屏蔽 input 触发
 
   const undoBtn = document.getElementById("undoBtn");
+  const redoBtn = document.getElementById("redoBtn");
 
-  function updateUndoBtn() {
+  function updateHistoryBtns() {
     const canUndo = undoPointer > 0;
+    const canRedo = undoPointer < undoStack.length - 1;
     undoBtn.disabled = !canUndo;
     undoBtn.style.opacity = canUndo ? "1" : "0.35";
+    redoBtn.disabled = !canRedo;
+    redoBtn.style.opacity = canRedo ? "1" : "0.35";
   }
 
   /** 将当前编辑器状态压入历史栈 */
@@ -1867,7 +1872,7 @@
     undoStack.push({ html, sel: getCESelStart() });
     if (undoStack.length > UNDO_MAX) undoStack.shift();
     undoPointer = undoStack.length - 1;
-    updateUndoBtn();
+    updateHistoryBtns();
   }
 
   /** 防抖：输入时每 400ms 或操作间隔触发一次快照 */
@@ -1895,7 +1900,20 @@
     try { setCESelection(snap.sel, snap.sel); } catch(_) {}
     noteInput.dispatchEvent(new Event("input"));
     undoApplying = false;
-    updateUndoBtn();
+    updateHistoryBtns();
+  }
+
+  /** 执行重做 */
+  function performRedo() {
+    if (undoPointer >= undoStack.length - 1) return;
+    undoPointer++;
+    const snap = undoStack[undoPointer];
+    undoApplying = true;
+    noteInput.innerHTML = snap.html;
+    try { setCESelection(snap.sel, snap.sel); } catch(_) {}
+    noteInput.dispatchEvent(new Event("input"));
+    undoApplying = false;
+    updateHistoryBtns();
   }
 
   // 编辑器 input 时安排快照
@@ -1906,11 +1924,9 @@
     if (undoPointer === -1) pushUndoSnapshot();
   }, { once: false });
 
-  // 撤回按钮点击
-  undoBtn.addEventListener("mousedown", (e) => {
-    e.preventDefault();
-    performUndo();
-  });
+  // 撤回 / 重做按钮点击
+  undoBtn.addEventListener("mousedown", (e) => { e.preventDefault(); performUndo(); });
+  redoBtn.addEventListener("mousedown", (e) => { e.preventDefault(); performRedo(); });
 
   // ─────────────────────────────────────────────────────────────────
 
@@ -1922,6 +1938,7 @@
     undoStack   = [];
     undoPointer = -1;
     if (undoBtn) { undoBtn.disabled = true; undoBtn.style.opacity = "0.35"; }
+    if (redoBtn) { redoBtn.disabled = true; redoBtn.style.opacity = "0.35"; }
   }
 
   function enterEditMode(note) {
@@ -2555,6 +2572,8 @@
     // Ctrl/Cmd 快捷键
     if (e.ctrlKey || e.metaKey) {
       if (e.key === "z" && !e.shiftKey) { e.preventDefault(); performUndo(); return; }
+      if (e.key === "z" &&  e.shiftKey) { e.preventDefault(); performRedo(); return; }
+      if (e.key === "y"  && !e.shiftKey) { e.preventDefault(); performRedo(); return; }
       if (e.key === "b") { e.preventDefault(); pushSnapshotNow(); applyFormat("bold");   return; }
       if (e.key === "i") { e.preventDefault(); pushSnapshotNow(); applyFormat("italic"); return; }
       if (e.key === "`") { e.preventDefault(); pushSnapshotNow(); applyFormat("code");   return; }
@@ -2923,6 +2942,18 @@
   // ── 更新日志数据 ──────────────────────────────────────────────────
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
+    {
+      version: "v0.2.13",
+      date: "2026-03-02",
+      type: "feat",
+      desc: "编辑器新增重做功能",
+      items: [
+        "格式栏撤回按钮旁新增「↪」重做按钮，点击可恢复被撤回的操作",
+        "支持快捷键 Ctrl+Shift+Z 或 Ctrl+Y（Mac 用 Cmd+Shift+Z）触发重做",
+        "撤回后输入新内容会清除重做历史（与主流编辑器行为一致）",
+        "撤回 / 重做按钮状态实时联动，无历史时自动置灰"
+      ]
+    },
     {
       version: "v0.2.12",
       date: "2026-03-02",
