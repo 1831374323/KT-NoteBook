@@ -1176,7 +1176,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.14</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.15</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -1457,13 +1457,15 @@
   /** 把 note.text 转为纯文本（用于 autoTitle、字数、搜索等场景） */
   function noteToPlain(text) {
     if (!text) return "";
-    if (/<(strong|em|code|br|div|b|i)\b/.test(text)) {
+    // 剥离 <!--html--> 标记，取出真正的 HTML 内容
+    const raw = text.startsWith("<!--html-->") ? text.slice(11) : text;
+    if (/<(strong|em|code|br|div|b|i)\b/.test(raw)) {
       const d = document.createElement("div");
-      d.innerHTML = normalizeHtmlLines(text);
+      d.innerHTML = normalizeHtmlLines(raw);
       d.querySelectorAll("br").forEach(br => br.replaceWith("\n"));
       return d.textContent;
     }
-    return text;
+    return raw;
   }
 
   /* ─────────── contenteditable 工具函数 ─────────── */
@@ -2082,8 +2084,7 @@
   // 自动生成标题：取正文第一行前5字，超出加...
   function autoTitle(text) {
     const plain     = noteToPlain(text);
-    const firstLine = plain.split("\n")[0].trim();
-    return firstLine.length <= 5 ? firstLine : firstLine.slice(0, 5) + "…";
+    return plain.split("\n")[0].trim();
   }
 
   // --- 笔记右键菜单 ---
@@ -2945,6 +2946,16 @@
   // ── 更新日志数据 ──────────────────────────────────────────────────
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
+    {
+      version: "v0.2.15",
+      date: "2026-03-02",
+      type: "fix",
+      desc: "自动标题修复：去除 <!--html--> 标记，显示完整首行",
+      items: [
+        "修复自动标题中出现「<!--html-->」字样的问题",
+        "自动标题上限从 5 个字扩展为完整的第一行内容（由 CSS 控制溢出截断）"
+      ]
+    },
     {
       version: "v0.2.14",
       date: "2026-03-02",
