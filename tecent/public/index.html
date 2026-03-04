@@ -1176,7 +1176,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.13</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.14</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -1446,8 +1446,11 @@
 
   function noteToHtml(text) {
     if (!text) return "";
-    // 含 HTML 标签（新格式）→ 规范化后直接用
+    // 新格式：带 <!--html--> 标记，直接用 HTML（用户手打的 ** _ 等字符不会被 markdown 转义）
+    if (text.startsWith("<!--html-->")) return normalizeHtmlLines(text.slice(11));
+    // 兼容旧格式：含 HTML 标签的直接用
     if (/<(strong|em|code|br|div|b|i)\b/.test(text)) return normalizeHtmlLines(text);
+    // 最旧格式：纯 markdown 文本，走渲染
     return renderMarkdown(text);
   }
 
@@ -2472,7 +2475,7 @@
       : [];
 
     // 把当前 HTML 转回 markdown 存入 modal.pendingText（存储格式）
-    modal.pendingHtml = noteInput.innerHTML;
+    modal.pendingHtml = "<!--html-->" + noteInput.innerHTML;
     openTagModal(text, date, title, preselected);
   });
 
@@ -2942,6 +2945,16 @@
   // ── 更新日志数据 ──────────────────────────────────────────────────
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
+    {
+      version: "v0.2.14",
+      date: "2026-03-02",
+      type: "fix",
+      desc: "手动输入 ** _ 等字符不再被转成格式",
+      items: [
+        "在编辑器中手动打出 **text** 或 _text_ 等 markdown 符号，保存后重新打开不再被自动转成加粗/斜体",
+        "新保存的笔记统一走 HTML 存储路径，彻底规避 markdown 解析；已有旧格式笔记继续兼容显示"
+      ]
+    },
     {
       version: "v0.2.13",
       date: "2026-03-02",
