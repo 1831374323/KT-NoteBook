@@ -1240,7 +1240,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.19</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.20</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -2048,6 +2048,9 @@
   const clearAllBtn = document.getElementById("clearAllBtn");
   const sortSelect  = document.getElementById("sortSelect");
 
+  // 排序方式：'updatedAt' | 'createdAt'
+  let sortOrder = localStorage.getItem("sortOrder") || "updatedAt";
+
   // 初始化排序选择器
   sortSelect.value = sortOrder;
   sortSelect.addEventListener("change", () => {
@@ -2284,9 +2287,6 @@
     saveNotes();
     render();
   });
-
-  // 排序方式：'updatedAt' | 'createdAt'
-  let sortOrder = localStorage.getItem("sortOrder") || "updatedAt";
 
   function renderNotes() {
     noteListEl.innerHTML = "";
@@ -3048,6 +3048,15 @@
   // ── 更新日志数据 ──────────────────────────────────────────────────
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
+    {
+      version: "v0.2.20",
+      date: "2026-03-02",
+      type: "fix",
+      desc: "修复 sortOrder 变量初始化顺序导致的崩溃",
+      items: [
+        "修复「Cannot access 'sortOrder' before initialization」报错，该错误导致页面完全无法加载"
+      ]
+    },
     {
       version: "v0.2.19",
       date: "2026-03-02",
