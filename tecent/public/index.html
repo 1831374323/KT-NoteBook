@@ -1240,7 +1240,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.20</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.21</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -2645,6 +2645,10 @@
   }
 
   noteInput.addEventListener("keydown", (e) => {
+    // IME 输入法合成期间（中文/日文等）忽略所有自定义键盘处理，
+    // 避免按 Enter 上屏时文字重复或意外换行
+    if (e.isComposing || e.keyCode === 229) return;
+
     // CE 代理对象：让键盘处理逻辑可沿用纯文本 API
     const ta = {
       get value()          { return getEditorText(); },
@@ -3048,6 +3052,16 @@
   // ── 更新日志数据 ──────────────────────────────────────────────────
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
+    {
+      version: "v0.2.21",
+      date: "2026-03-02",
+      type: "fix",
+      desc: "修复中文输入法 Enter 确认时文字重复且换行的问题",
+      items: [
+        "使用中文/日文等输入法时，按 Enter 上屏英文不再出现两次，也不会意外换行",
+        "在 keydown 处理器开头增加 IME 合成状态检测（e.isComposing），合成期间不执行自定义逻辑"
+      ]
+    },
     {
       version: "v0.2.20",
       date: "2026-03-02",
