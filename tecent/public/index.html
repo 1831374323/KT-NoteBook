@@ -421,6 +421,23 @@
       gap: 8px;
     }
 
+    .sort-select {
+      font-size: 12px;
+      color: var(--text-sub);
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 2px 6px;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.15s, color 0.15s;
+      font-family: inherit;
+    }
+    .sort-select:hover, .sort-select:focus {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
     .tags-container,
     .note-tags {
       display: flex;
@@ -1223,7 +1240,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.16</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.17</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -1320,6 +1337,10 @@
       <div class="section">
         <div class="section-title">
           <span>笔记列表</span>
+          <select id="sortSelect" class="sort-select" title="排序方式">
+            <option value="updatedAt">按更新时间</option>
+            <option value="createdAt">按创建时间</option>
+          </select>
         </div>
         <div class="note-list" id="noteList"></div>
       </div>
@@ -2025,6 +2046,15 @@
   const noteSummaryEl = document.getElementById("noteSummary");
   const filterInfoEl = document.getElementById("filterInfo");
   const clearAllBtn = document.getElementById("clearAllBtn");
+  const sortSelect  = document.getElementById("sortSelect");
+
+  // 初始化排序选择器
+  sortSelect.value = sortOrder;
+  sortSelect.addEventListener("change", () => {
+    sortOrder = sortSelect.value;
+    localStorage.setItem("sortOrder", sortOrder);
+    renderNotes();
+  });
 
   // 删除某个标签：从所有笔记中移除，并从全局 tagList 注销
   function deleteTagEverywhere(tagToDelete) {
@@ -2255,11 +2285,19 @@
     render();
   });
 
+  // 排序方式：'updatedAt' | 'createdAt'
+  let sortOrder = localStorage.getItem("sortOrder") || "updatedAt";
+
   function renderNotes() {
     noteListEl.innerHTML = "";
     let list = notes.slice();
 
-    list.sort((a, b) => b.createdAt - a.createdAt);
+    if (sortOrder === "createdAt") {
+      list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    } else {
+      // updatedAt：没有 updatedAt 的旧笔记降级用 createdAt
+      list.sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+    }
 
     if (activeTag) {
       list = list.filter((n) => n.tags && n.tags.includes(activeTag));
@@ -2472,11 +2510,12 @@
       if (idx !== -1) {
         notes[idx] = {
           ...notes[idx],
-          title:    modal.pendingTitle,
-          date:     modal.pendingDate,
-          datetime: formatDatetime(now),
-          text:     modal.pendingHtml || modal.pendingText,
-          tags:     finalTags,
+          title:     modal.pendingTitle,
+          date:      modal.pendingDate,
+          datetime:  formatDatetime(now),
+          text:      modal.pendingHtml || modal.pendingText,
+          tags:      finalTags,
+          updatedAt: now.getTime(),
         };
       }
       saveNotes();
@@ -2485,13 +2524,14 @@
     } else {
       // 新建笔记
       const newNote = {
-        id: now.getTime(),
-        date: modal.pendingDate,
-        title: modal.pendingTitle,
-        datetime: formatDatetime(now),
-        text: modal.pendingHtml || modal.pendingText,
-        tags: finalTags,
+        id:        now.getTime(),
+        date:      modal.pendingDate,
+        title:     modal.pendingTitle,
+        datetime:  formatDatetime(now),
+        text:      modal.pendingHtml || modal.pendingText,
+        tags:      finalTags,
         createdAt: now.getTime(),
+        updatedAt: now.getTime(),
       };
       notes.push(newNote);
       saveNotes();
@@ -2990,6 +3030,17 @@
   // ── 更新日志数据 ──────────────────────────────────────────────────
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
+    {
+      version: "v0.2.17",
+      date: "2026-03-02",
+      type: "feat",
+      desc: "笔记列表新增排序方式选择",
+      items: [
+        "笔记列表标题行右侧新增排序下拉框，支持「按更新时间」和「按创建时间」两种排序",
+        "默认按更新时间倒序，每次编辑笔记后会自动记录更新时间并置顶",
+        "排序偏好自动保存到本地，刷新页面后保持上次选择"
+      ]
+    },
     {
       version: "v0.2.16",
       date: "2026-03-02",
