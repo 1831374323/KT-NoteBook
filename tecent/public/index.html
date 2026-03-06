@@ -872,6 +872,53 @@
       color: var(--primary);
     }
 
+    /* ── 图标按钮（右上角）── */
+    .icon-btn {
+      position: relative;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      width: 32px;
+      height: 32px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 15px;
+      color: var(--text-sub);
+      padding: 0;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+      flex-shrink: 0;
+    }
+    .icon-btn:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+    .icon-btn:active { opacity: 0.75; }
+
+    /* Tooltip */
+    .icon-btn::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      background: rgba(15,23,42,0.82);
+      color: #fff;
+      font-size: 12px;
+      white-space: nowrap;
+      padding: 4px 8px;
+      border-radius: 6px;
+      pointer-events: none;
+      opacity: 0;
+      transform: translateY(-4px);
+      transition: opacity 0.15s, transform 0.15s;
+      z-index: 9999;
+    }
+    .icon-btn:hover::after {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
     .changelog-drawer {
       position: fixed;
       top: 0;
@@ -1176,7 +1223,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.15</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.16</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -1185,7 +1232,8 @@
         <input id="dateInput" type="date" />
       </label>
       <button id="todayBtn" class="outline small">跳到今天</button>
-      <button id="changelogBtn" class="changelog-btn" title="版本更新记录">📋 更新记录</button>
+      <button id="trashBtn" class="icon-btn" data-tooltip="回收站">🗑<span class="trash-badge" id="trashBadge" style="display:none">0</span></button>
+      <button id="changelogBtn" class="icon-btn" data-tooltip="版本更新记录">📋</button>
     </div>
   </header>
 
@@ -1272,10 +1320,6 @@
       <div class="section">
         <div class="section-title">
           <span>笔记列表</span>
-          <button class="trash-btn" id="trashBtn" title="查看回收站">
-            🗑 回收站
-            <span class="trash-badge" id="trashBadge" style="display:none">0</span>
-          </button>
         </div>
         <div class="note-list" id="noteList"></div>
       </div>
@@ -2946,6 +2990,16 @@
   // ── 更新日志数据 ──────────────────────────────────────────────────
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
+    {
+      version: "v0.2.16",
+      date: "2026-03-02",
+      type: "feat",
+      desc: "回收站和更新记录按钮改为右上角图标",
+      items: [
+        "回收站和更新记录按钮缩小为纯图标（🗑 / 📋），统一收纳至右上角",
+        "图标按钮悬停时显示文字说明 tooltip，不占用页面空间"
+      ]
+    },
     {
       version: "v0.2.15",
       date: "2026-03-02",
