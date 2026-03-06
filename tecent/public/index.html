@@ -1240,7 +1240,7 @@
     <h1>
       <span class="logo-dot"></span>
       学习日志 · 笔记本
-      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.17</span>
+      <span style="font-size:11px;font-weight:400;color:var(--text-sub);margin-left:6px;">v0.2.19</span>
     </h1>
     <div class="controls">
       <span id="syncBadge" class="sync-badge sync-offline">○ 连接中…</span>
@@ -2926,16 +2926,23 @@
 
     // 登录：优先用户名密码，失败则降级匿名登录（使用 2.24+ signInWithPassword / signInAnonymously）
     try {
+      console.log("[Auth] 开始获取会话...");
       const { data: sessionData } = await tcbAuth.getSession();
+      console.log("[Auth] getSession 返回：", JSON.stringify(sessionData ?? null));
       if (!sessionData?.session) {
+        console.log("[Auth] 无会话，尝试用户名密码登录...");
         const { error: pwdErr } = await tcbAuth.signInWithPassword({
           username: "default",
           password: "Default1234"
         });
         if (pwdErr) {
-          console.warn("[Auth] 用户名密码登录失败，尝试匿名登录：", pwdErr);
+          console.warn("[Auth] 用户名密码登录失败，原因：", pwdErr?.code, pwdErr?.message, pwdErr);
+          console.log("[Auth] 降级尝试匿名登录...");
           const { error: anonErr } = await tcbAuth.signInAnonymously();
-          if (anonErr) throw anonErr;
+          if (anonErr) {
+            console.error("[Auth] 匿名登录也失败，原因：", anonErr?.code, anonErr?.message, anonErr);
+            throw anonErr;
+          }
           console.log("[Auth] 匿名登录成功");
         } else {
           console.log("[Auth] 登录成功 username: default");
@@ -2946,8 +2953,10 @@
         console.log("[Auth] 已有会话，当前用户：", display);
       }
     } catch (e) {
-      console.warn("[Auth] TCB 登录失败，使用本地模式：", e);
+      console.error("[Auth] TCB 登录异常，使用本地模式。错误类型:", e?.name, "| 错误码:", e?.code, "| 消息:", e?.message);
+      console.error("[Auth] 完整错误对象：", e);
       loadNotesFromLocal();
+      setSyncBadge("offline");
       render();
       return;
     }
@@ -2965,12 +2974,16 @@
       localStorage.getItem(FILE_ID_KEY) ? "(来自缓存)" : "(来自默认值)");
 
     try {
+      console.log("[Storage] 调用 getTempFileURL...");
       const res = await tcbApp.getTempFileURL({ fileList: [savedFileId] });
       const item = res.fileList[0];
+      console.log("[Storage] getTempFileURL 返回：", JSON.stringify(item));
       if (item.code === "SUCCESS" && item.tempFileURL) {
         localStorage.setItem(FILE_ID_KEY, savedFileId);
         const freshUrl = item.tempFileURL + (item.tempFileURL.includes("?") ? "&" : "?") + "_t=" + Date.now();
+        console.log("[Storage] fetch 云端文件...", freshUrl.split("?")[0]);
         const resp = await fetch(freshUrl, { cache: "no-store" });
+        console.log("[Storage] fetch 响应状态：", resp.status, resp.statusText);
         if (resp.ok) {
           const data = await resp.json();
           const cloudNotes = Array.isArray(data) ? data : (Array.isArray(data.notes) ? data.notes : []);
@@ -3008,19 +3021,24 @@
           localStorage.setItem(STORAGE_KEY, serializeData());
           setSyncBadge("online");
         } else {
-          console.warn("[Storage] 云端文件请求失败，HTTP:", resp.status);
+          let respBody = "";
+          try { respBody = await resp.text(); } catch(_) {}
+          console.warn("[Storage] 云端文件请求失败，HTTP:", resp.status, resp.statusText, "| 响应体:", respBody.slice(0, 300));
           if (!lastSyncFailed) loadNotesFromLocal();
+          setSyncBadge("offline");
         }
       } else if (item.code === "STORAGE_FILE_NONEXIST") {
         console.log("[Storage] 云端文件不存在，使用本地数据");
         if (!lastSyncFailed) loadNotesFromLocal();
         setSyncBadge("offline");
       } else {
-        console.warn("[Storage] 获取临时链接失败：", item);
+        console.warn("[Storage] 获取临时链接失败，完整返回：", JSON.stringify(item));
         if (!lastSyncFailed) loadNotesFromLocal();
+        setSyncBadge("offline");
       }
     } catch (err) {
-      console.warn("[Storage] 云存储读取失败，使用本地数据：", err);
+      console.error("[Storage] 云存储读取异常。错误类型:", err?.name, "| 错误码:", err?.code, "| 消息:", err?.message);
+      console.error("[Storage] 完整错误对象：", err);
       if (!lastSyncFailed) loadNotesFromLocal();
       setSyncBadge("offline");
     }
@@ -3030,6 +3048,27 @@
   // ── 更新日志数据 ──────────────────────────────────────────────────
   // type: feat（新功能）| fix（修复）| infra（基础设施/部署）
   const CHANGELOG = [
+    {
+      version: "v0.2.19",
+      date: "2026-03-02",
+      type: "infra",
+      desc: "加强网络错误日志输出",
+      items: [
+        "认证、云存储各步骤均输出详细 log：错误码、错误消息、完整错误对象",
+        "HTTP 失败时输出响应状态码和响应体，方便定位问题",
+        "getTempFileURL 返回完整结构，fetch URL 脱敏后也会打印"
+      ]
+    },
+    {
+      version: "v0.2.18",
+      date: "2026-03-02",
+      type: "fix",
+      desc: "修复同步状态卡在「连接中」的问题",
+      items: [
+        "修复登录失败、云端文件请求失败、链接获取异常等多个分支未更新同步状态的 bug",
+        "上述情况现在均会正确显示「○ 离线」，不再卡在「连接中…」初始状态"
+      ]
+    },
     {
       version: "v0.2.17",
       date: "2026-03-02",
